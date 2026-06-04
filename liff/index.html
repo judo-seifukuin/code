@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>姿勢チェック</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>姿勢チェック</h1>
+    <p class="caption">※ 本結果は姿勢傾向の参考情報であり、診断・治療を示すものではありません。</p>
+  </header>
+
+  <main>
+    <section id="view-consent" class="view">
+      <h2>ご利用にあたって</h2>
+      <p>本アプリは姿勢の傾向を可視化するための参考ツールです。撮影画像は端末内でのみ処理され、外部サーバーには送信されません。スコアと骨格座標のみが院内システムへ安全に送信されます。</p>
+      <label class="consent">
+        <input type="checkbox" id="consent-check" />
+        プライバシーポリシーに同意します
+      </label>
+      <button id="btn-start" class="primary" disabled>はじめる</button>
+    </section>
+
+    <section id="view-capture" class="view hidden">
+      <h2>撮影</h2>
+      <p>全身が画面に収まるように立ち、撮影してください。</p>
+      <div class="capture-area">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="buttons">
+        <button id="btn-shoot" class="primary">撮影する</button>
+        <button id="btn-history" class="secondary">過去履歴を見る</button>
+      </div>
+    </section>
+
+    <section id="view-result" class="view hidden">
+      <h2>解析結果</h2>
+      <div class="result-area">
+        <canvas id="result-canvas"></canvas>
+        <div class="score-box">
+          <div class="score-label">姿勢スコア</div>
+          <div class="score-value" id="score-value">--</div>
+          <ul class="metrics" id="metrics"></ul>
+        </div>
+      </div>
+      <div class="buttons">
+        <button id="btn-save" class="primary">保存する</button>
+        <button id="btn-retake" class="secondary">撮り直す</button>
+      </div>
+      <p id="save-status" class="status"></p>
+    </section>
+
+    <section id="view-history" class="view hidden">
+      <h2>履歴（Before / After）</h2>
+      <div id="history-list" class="history-list"></div>
+      <button id="btn-back" class="secondary">戻る</button>
+    </section>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p id="loading-text">処理中...</p>
+    </div>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/pose.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
