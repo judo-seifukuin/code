@@ -78,6 +78,7 @@ var Store_ = (function () {
         clientAt: r[1] ? (r[1] instanceof Date ? r[1].toISOString() : String(r[1])) : "",
         score: Number(r[3]) || 0,
         metrics: safeParse_(r[4], []),
+        landmarks: safeParse_(r[5], []),
         imageFileId: r[6] || "",
       }))
       .sort((a, b) => (a.at < b.at ? 1 : -1))

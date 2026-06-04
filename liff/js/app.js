@@ -13,7 +13,7 @@
   };
 
   // ---- 画面遷移 ----
-  const VIEWS = ["view-consent", "view-capture", "view-result", "view-history"];
+  const VIEWS = ["view-consent", "view-capture", "view-result", "view-history", "view-compare"];
   function showView(id) {
     VIEWS.forEach((v) => $(v).classList.toggle("hidden", v !== id));
   }
@@ -184,9 +184,10 @@
       list.innerHTML = '<p class="status">履歴はまだありません。</p>';
       return;
     }
+    const canCompare = !!state.lastAnalysis;
     records.forEach((r) => {
       const item = document.createElement("div");
-      item.className = "history-item";
+      item.className = "history-item" + (canCompare && r.landmarks && r.landmarks.length ? " tappable" : "");
       const date = new Date(r.at).toLocaleString("ja-JP", {
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit",
@@ -195,8 +196,57 @@
         <div class="date">${date}</div>
         <div class="score">${r.score}</div>
       `;
+      if (canCompare && r.landmarks && r.landmarks.length) {
+        item.addEventListener("click", () => openCompare(r));
+      }
       list.appendChild(item);
     });
+    if (!canCompare) {
+      const note = document.createElement("p");
+      note.className = "status";
+      note.textContent = "比較するには、先に撮影して結果を表示してください。";
+      list.appendChild(note);
+    }
+  }
+
+  function openCompare(beforeRecord) {
+    if (!state.lastAnalysis) return;
+    const W = 240;
+    const H = 320;
+
+    const beforeCanvas = $("compare-before-canvas");
+    beforeCanvas.width = W;
+    beforeCanvas.height = H;
+    const beforeSkel = PoseAnalyzer.renderSkeleton(beforeRecord.landmarks, W, H);
+    beforeCanvas.getContext("2d").drawImage(beforeSkel, 0, 0);
+
+    const afterCanvas = $("compare-after-canvas");
+    afterCanvas.width = W;
+    afterCanvas.height = H;
+    const afterSkel = PoseAnalyzer.renderSkeleton(state.lastAnalysis.landmarks, W, H);
+    afterCanvas.getContext("2d").drawImage(afterSkel, 0, 0);
+
+    const beforeDate = new Date(beforeRecord.at).toLocaleString("ja-JP", {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    });
+    $("compare-before-label").textContent = `Before（${beforeDate}）`;
+    $("compare-before-score").textContent = beforeRecord.score;
+    $("compare-after-score").textContent = state.lastAnalysis.score;
+
+    const diff = state.lastAnalysis.score - beforeRecord.score;
+    const diffEl = $("compare-diff");
+    diffEl.classList.remove("up", "down");
+    if (diff > 0) {
+      diffEl.textContent = `▲ ${diff} ポイント改善しました`;
+      diffEl.classList.add("up");
+    } else if (diff < 0) {
+      diffEl.textContent = `▼ ${Math.abs(diff)} ポイント低下しています`;
+      diffEl.classList.add("down");
+    } else {
+      diffEl.textContent = "前回と同じスコアです";
+    }
+    showView("view-compare");
   }
 
   // ---- イベント結線 ----
@@ -232,6 +282,9 @@
     });
     $("btn-back").addEventListener("click", () => {
       showView("view-consent");
+    });
+    $("btn-compare-back").addEventListener("click", () => {
+      showView("view-history");
     });
   }
 
