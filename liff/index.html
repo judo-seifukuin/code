@@ -57,9 +57,28 @@
     </section>
 
     <section id="view-history" class="view hidden">
-      <h2>履歴（Before / After）</h2>
+      <h2>履歴</h2>
+      <p class="caption">タップすると最新の解析結果と並べて比較できます。</p>
       <div id="history-list" class="history-list"></div>
       <button id="btn-back" class="secondary">戻る</button>
+    </section>
+
+    <section id="view-compare" class="view hidden">
+      <h2>Before / After 比較</h2>
+      <div class="compare-area">
+        <div class="compare-col">
+          <div class="compare-label" id="compare-before-label">Before</div>
+          <canvas id="compare-before-canvas"></canvas>
+          <div class="compare-score" id="compare-before-score">--</div>
+        </div>
+        <div class="compare-col">
+          <div class="compare-label">After（最新）</div>
+          <canvas id="compare-after-canvas"></canvas>
+          <div class="compare-score" id="compare-after-score">--</div>
+        </div>
+      </div>
+      <div class="compare-diff" id="compare-diff"></div>
+      <button id="btn-compare-back" class="secondary">履歴に戻る</button>
     </section>
 
     <div id="loading" class="loading hidden">

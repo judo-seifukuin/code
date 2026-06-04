@@ -212,6 +212,55 @@ button.secondary {
   color: var(--primary);
 }
 
+.history-item.tappable { cursor: pointer; }
+.history-item.tappable:active { background: var(--secondary); }
+
+.compare-area {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.compare-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.compare-label {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 600;
+}
+
+.compare-col canvas {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: var(--bg);
+  border-radius: 6px;
+}
+
+.compare-score {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.compare-diff {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  margin-bottom: 12px;
+}
+
+.compare-diff.up { color: var(--primary); }
+.compare-diff.down { color: var(--danger); }
+
 .loading {
   position: fixed;
   inset: 0;
