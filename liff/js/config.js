@@ -2,7 +2,7 @@
 // LINE Developers と GAS Web App のデプロイ完了後に実際の値へ置き換える。
 window.APP_CONFIG = {
   // LINE Developers > LIFF で発行される LIFF ID
-  LIFF_ID: "YOUR_LIFF_ID",
+  LIFF_ID: "2009687396-ga7aysOd",
 
   // Apps Script > デプロイ > 新しいデプロイ > ウェブアプリ で発行されるエンドポイントURL
   GAS_ENDPOINT: "https://script.google.com/macros/s/XXXXXXXXXXXX/exec",
