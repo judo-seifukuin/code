@@ -101,19 +101,6 @@
     await analyzeSource(tmp, w, h);
   }
 
-  // MediaPipe の公式サンプル画像（CDN ホスト）を流用してネット越しに動作確認
-  function loadSample() {
-    showLoading("サンプル画像を読み込み中...");
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => analyzeSource(img, img.width, img.height);
-    img.onerror = () => {
-      setStatus("サンプル画像の読み込みに失敗しました。ネットワークを確認してください。", true);
-      hideLoading();
-    };
-    img.src = "https://storage.googleapis.com/mediapipe-assets/pose_world_landmarks.jpg";
-  }
-
   function loadUploaded(file) {
     if (!file) return;
     const reader = new FileReader();
@@ -139,7 +126,6 @@
         hideLoading();
       }
     });
-    $("btn-sample").addEventListener("click", loadSample);
     $("btn-upload").addEventListener("click", () => $("file-input").click());
     $("file-input").addEventListener("change", (e) => loadUploaded(e.target.files[0]));
     $("btn-shoot").addEventListener("click", shootFromCamera);
