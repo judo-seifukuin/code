@@ -20,12 +20,26 @@
       <p>このページは開発・動作確認用です。LINEログインや院内システムへの保存は行いません。</p>
       <ul style="font-size: 13px; color: var(--text-sub); line-height: 1.7;">
         <li>カメラ起動 → 撮影 → MediaPipe 解析 → スコア表示までを検証</li>
-        <li>「画像をアップロード」では手持ちの全身写真を選んで解析できます</li>
+        <li>サンプル画像（3枚）でも即座に解析を試せます</li>
         <li>解析結果はブラウザ内のみ、どこにも送信されません</li>
       </ul>
       <div class="buttons">
         <button id="btn-camera" class="primary">カメラで撮影する</button>
         <button id="btn-upload" class="secondary">画像をアップロードして試す</button>
+      </div>
+      <div class="sample-grid" id="sample-grid">
+        <div class="sample-item" data-src="sample/IMG_1358.png">
+          <img src="sample/IMG_1358.png" alt="サンプル1" />
+          <span>サンプル①</span>
+        </div>
+        <div class="sample-item" data-src="sample/IMG_1359.png">
+          <img src="sample/IMG_1359.png" alt="サンプル2" />
+          <span>サンプル②</span>
+        </div>
+        <div class="sample-item" data-src="sample/IMG_1360.png">
+          <img src="sample/IMG_1360.png" alt="サンプル3" />
+          <span>サンプル③</span>
+        </div>
       </div>
       <input type="file" id="file-input" accept="image/*" style="display:none" />
     </section>
