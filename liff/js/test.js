@@ -113,6 +113,30 @@
     reader.readAsDataURL(file);
   }
 
+  // サンプル画像をロード。Geminiの透かしを右下から白で覆い隠してから解析・表示する。
+  function loadSample(src) {
+    showLoading("サンプル画像を読み込み中...");
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      // 右下のGemini透かし領域を白でマスク（おおよそ右12% × 下7%）
+      const maskW = img.width * 0.14;
+      const maskH = img.height * 0.08;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(img.width - maskW, img.height - maskH, maskW, maskH);
+      analyzeSource(canvas, img.width, img.height);
+    };
+    img.onerror = () => {
+      setStatus("サンプル画像の読み込みに失敗しました。", true);
+      hideLoading();
+    };
+    img.src = src;
+  }
+
   function bindEvents() {
     $("btn-camera").addEventListener("click", async () => {
       showLoading("カメラを起動中...");
@@ -128,6 +152,9 @@
     });
     $("btn-upload").addEventListener("click", () => $("file-input").click());
     $("file-input").addEventListener("change", (e) => loadUploaded(e.target.files[0]));
+    document.querySelectorAll(".sample-item").forEach((item) => {
+      item.addEventListener("click", () => loadSample(item.dataset.src));
+    });
     $("btn-shoot").addEventListener("click", shootFromCamera);
     $("btn-cancel").addEventListener("click", () => {
       stopCamera();
