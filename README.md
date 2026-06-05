@@ -43,6 +43,14 @@ LINE LIFF × MediaPipe Pose × Google Apps Script で構成される、サーバ
 4. **ホスティング**: `main` に push すれば GitHub Pages へ自動デプロイされる（`Settings → Pages` で Source を GitHub Actions に設定）。
 5. **動作確認**: LINE 上で LIFF を開き、撮影→解析→保存→履歴閲覧→Before/After比較 が成立することを確認。
 
+## テストモード（LIFF / GAS なしで動作確認）
+
+LINE Developers / GAS のセットアップ前にカメラ＋姿勢解析の動作だけ確認したい場合は、`liff/test.html` を直接開く。
+
+- ホスティング後の URL: `https://<owner>.github.io/<repo>/test.html`
+- 提供機能: カメラ撮影 / サンプル画像での解析 / ローカル画像アップロード解析、4指標スコア表示、デバッグ情報（生のランドマーク座標）
+- LIFF SDK ・ GAS 通信は一切呼ばないため、設定なしで PC ブラウザでも動作する
+
 ## 開発・運用ドキュメント
 
 | ファイル | 用途 |

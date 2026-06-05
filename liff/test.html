@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>姿勢チェック（テストモード）</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>姿勢チェック <span style="color: var(--danger); font-size: 12px;">[TEST]</span></h1>
+    <p class="caption">LIFF / GAS を介さずカメラ＋AI解析だけを試せるスタンドアロン版です。</p>
+  </header>
+
+  <main>
+    <section id="view-start" class="view">
+      <h2>テストモードについて</h2>
+      <p>このページは開発・動作確認用です。LINEログインや院内システムへの保存は行いません。</p>
+      <ul style="font-size: 13px; color: var(--text-sub); line-height: 1.7;">
+        <li>カメラ起動 → 撮影 → MediaPipe 解析 → スコア表示までを検証</li>
+        <li>「サンプル画像で試す」では内蔵のテスト用写真を解析できます</li>
+        <li>解析結果はブラウザ内のみ、どこにも送信されません</li>
+      </ul>
+      <div class="buttons">
+        <button id="btn-camera" class="primary">カメラで撮影する</button>
+        <button id="btn-sample" class="secondary">サンプル画像で試す</button>
+        <button id="btn-upload" class="secondary">画像をアップロードして試す</button>
+      </div>
+      <input type="file" id="file-input" accept="image/*" style="display:none" />
+    </section>
+
+    <section id="view-capture" class="view hidden">
+      <h2>撮影</h2>
+      <p>全身が画面に収まるように立ち、撮影してください。</p>
+      <div class="capture-area">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="buttons">
+        <button id="btn-shoot" class="primary">撮影する</button>
+        <button id="btn-cancel" class="secondary">戻る</button>
+      </div>
+    </section>
+
+    <section id="view-result" class="view hidden">
+      <h2>解析結果</h2>
+      <div class="result-area">
+        <canvas id="result-canvas"></canvas>
+        <div class="score-box">
+          <div class="score-label">姿勢スコア</div>
+          <div class="score-value" id="score-value">--</div>
+          <ul class="metrics" id="metrics"></ul>
+        </div>
+      </div>
+      <details style="margin-top: 12px; font-size: 12px;">
+        <summary style="cursor: pointer; color: var(--text-sub);">デバッグ情報を表示</summary>
+        <pre id="debug-info" style="overflow-x: auto; background: var(--bg); padding: 8px; border-radius: 6px; font-size: 11px;"></pre>
+      </details>
+      <div class="buttons">
+        <button id="btn-retake" class="primary">もう一度</button>
+      </div>
+      <p id="status" class="status"></p>
+    </section>
+
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p id="loading-text">処理中...</p>
+    </div>
+  </main>
+
+  <script src="js/pose.js"></script>
+  <script src="js/test.js"></script>
+</body>
+</html>
