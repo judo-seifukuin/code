@@ -131,4 +131,5 @@ DRIVE_FOLDER_ID = 1wAS3duBJm6lQix85CNuFmLC-X3MIlw6y
 | デプロイ URL が 404 / 403 | 「アクセスできるユーザー」が **全員** になっていない |
 | `IDトークン検証失敗` | `LINE_CHANNEL_ID` の値が誤り（`2009687396`） |
 | `SHEET_ID script property is not set` | スクリプトプロパティ未登録 |
+| `指定された権限では DriveApp.getFolderById を呼び出すことができません` | `appsscript.json` の oauthScopes に `https://www.googleapis.com/auth/drive` が必要。修正後に再デプロイし、初回呼び出し時に権限ダイアログで「許可」を選び直す |
 | 「姿勢ツール」メニューが出ない | `Admin.gs` を作成していない / スプレッドシートをリロード |
