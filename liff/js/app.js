@@ -74,7 +74,6 @@
     }
     showLoading("解析中...");
     try {
-      // ① 一時キャンバスに現フレームを描画（解析のみに利用、保存しない）
       const w = video.videoWidth;
       const h = video.videoHeight;
       const tmp = document.createElement("canvas");
@@ -82,36 +81,28 @@
       tmp.height = h;
       tmp.getContext("2d").drawImage(video, 0, 0, w, h);
 
-      // ② MediaPipe で姿勢解析
       const results = await PoseAnalyzer.analyze(tmp);
       const landmarks = results.poseLandmarks;
       const evalResult = PoseAnalyzer.evaluate(landmarks);
 
-      // ③ 骨格のみのサムネイル生成（生画像は破棄）
-      const skeleton = PoseAnalyzer.renderSkeleton(landmarks, 360, 480);
-      const skeletonB64 = skeleton.toDataURL("image/png");
+      // 結果画面に原画+注釈オーバーレイを描画
+      renderResult(landmarks, evalResult, tmp);
 
-      // ④ 結果画面に描画
-      const result = $("result-canvas");
-      result.width = skeleton.width;
-      result.height = skeleton.height;
-      result.getContext("2d").drawImage(skeleton, 0, 0);
+      // 保存用サムネ（骨格のみ・原画含まず）はクオリティOKの時だけ作る
+      let skeletonB64 = null;
+      if (evalResult.quality.canScore) {
+        const skeleton = PoseAnalyzer.renderSkeleton(landmarks, 360, 480);
+        skeletonB64 = skeleton.toDataURL("image/png");
+      }
 
-      $("score-value").textContent = evalResult.score;
-      const metricsEl = $("metrics");
-      metricsEl.innerHTML = "";
-      evalResult.metrics.forEach((m) => {
-        const li = document.createElement("li");
-        li.innerHTML = `<span>${m.label}</span><span>${m.value} / 25</span>`;
-        metricsEl.appendChild(li);
-      });
-
-      state.lastAnalysis = {
+      state.lastAnalysis = evalResult.quality.canScore ? {
         score: evalResult.score,
         metrics: evalResult.metrics,
+        patterns: evalResult.patterns,
+        quality: evalResult.quality,
         landmarks: PoseAnalyzer.serializeLandmarks(landmarks),
         skeletonB64,
-      };
+      } : null;
 
       stopCamera();
       setStatus("");
@@ -122,6 +113,103 @@
     } finally {
       hideLoading();
     }
+  }
+
+  // ---- 結果レンダラ ----
+  function renderResult(landmarks, evalResult, originalCanvas) {
+    const W = 360, H = 480;
+    const canvas = $("result-canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const annotated = PoseAnalyzer.renderAnnotated(landmarks, originalCanvas, W, H, { plumbLine: true, labels: true });
+    canvas.getContext("2d").drawImage(annotated, 0, 0);
+
+    // メタ（撮影アングル / 全身 / 立位 等）
+    const meta = $("result-meta");
+    meta.innerHTML = "";
+    const q = evalResult.quality;
+    meta.appendChild(makeChip("撮影アングル", labelOfView(q.view)));
+    meta.appendChild(makeChip("全身可視", q.fullBody ? "✓" : "✗"));
+    meta.appendChild(makeChip("立位判定", q.standing ? "✓" : "✗"));
+
+    // 警告表示
+    const warnEl = $("quality-warning");
+    if (q.warnings.length) {
+      warnEl.classList.remove("hidden");
+      warnEl.classList.toggle("danger", !q.canScore);
+      warnEl.innerHTML = `<strong>${q.canScore ? "注意" : "評価不可"}</strong><ul>${q.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul>`;
+    } else {
+      warnEl.classList.add("hidden");
+    }
+
+    // スコア
+    if (q.canScore && evalResult.score != null) {
+      $("score-value").textContent = evalResult.score;
+      $("score-sub").textContent = "コア4指標（肩・骨盤・頭部偏位・体幹）の重症度合算";
+      $("btn-save").disabled = false;
+    } else {
+      $("score-value").textContent = "—";
+      $("score-sub").textContent = "撮影品質要件を満たしていないため、スコアは算出していません。";
+      $("btn-save").disabled = true;
+    }
+
+    // 計測値テーブル
+    const table = $("metrics-table");
+    table.innerHTML = "";
+    if (evalResult.metrics.length) {
+      evalResult.metrics.forEach((m) => table.appendChild(renderMetricRow(m)));
+    } else {
+      table.innerHTML = '<p class="patterns-list empty">計測値はありません。</p>';
+    }
+
+    // 検出パターン
+    const pList = $("patterns-list");
+    pList.innerHTML = "";
+    if (evalResult.patterns && evalResult.patterns.length) {
+      evalResult.patterns.forEach((p) => {
+        const div = document.createElement("div");
+        div.className = "pattern-item";
+        div.textContent = p;
+        pList.appendChild(div);
+      });
+    } else if (q.canScore) {
+      pList.innerHTML = '<p class="empty">特筆すべき左右差・偏位は検出されませんでした。</p>';
+    } else {
+      pList.innerHTML = '<p class="empty">評価対象外のため、パターン判定は行っていません。</p>';
+    }
+
+    $("kendall-note").textContent = evalResult.kendallNote || "";
+  }
+
+  function renderMetricRow(m) {
+    const div = document.createElement("div");
+    div.className = "metric-row";
+    const sign = m.valueDeg > 0 ? "+" : "";
+    const [lo, hi] = m.normalRangeDeg;
+    div.innerHTML = `
+      <div class="name">${escapeHtml(m.label)}<small>${escapeHtml(m.clinicalName)}</small></div>
+      <div class="value">${sign}${m.valueDeg}°<small>正常域 ${lo}°〜${hi}°</small></div>
+      <div class="badge badge-${m.severity}">${escapeHtml(m.severityLabel)}</div>
+      <div class="explanation">${escapeHtml(m.direction)} ／ ${escapeHtml(m.explanation)}</div>
+    `;
+    return div;
+  }
+
+  function makeChip(key, value) {
+    const span = document.createElement("span");
+    span.className = "chip";
+    span.innerHTML = `${escapeHtml(key)}: <strong>${escapeHtml(value)}</strong>`;
+    return span;
+  }
+
+  function labelOfView(view) {
+    return { frontal: "正面", left_side: "左側面", right_side: "右側面", oblique: "斜め", unknown: "判定不能" }[view] || view;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
   }
 
   // ---- GAS 通信 ----
@@ -138,7 +226,10 @@
   }
 
   async function saveRecord() {
-    if (!state.lastAnalysis) return;
+    if (!state.lastAnalysis) {
+      setStatus("評価対象外の撮影は保存できません。撮り直してください。", true);
+      return;
+    }
     showLoading("保存中...");
     try {
       const a = state.lastAnalysis;
@@ -147,6 +238,8 @@
         idToken: state.idToken,
         score: a.score,
         metrics: a.metrics,
+        patterns: a.patterns,
+        quality: { view: a.quality.view, standing: a.quality.standing, fullBody: a.quality.fullBody },
         landmarks: a.landmarks,
         skeleton: a.skeletonB64,
         clientAt: new Date().toISOString(),

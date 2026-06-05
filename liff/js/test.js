@@ -39,6 +39,16 @@
     }
   }
 
+  function labelOfView(view) {
+    return { frontal: "正面", left_side: "左側面", right_side: "右側面", oblique: "斜め", unknown: "判定不能" }[view] || view;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+  }
+
   async function analyzeSource(source, sourceWidth, sourceHeight) {
     showLoading("解析中...");
     try {
@@ -46,33 +56,72 @@
       const landmarks = results.poseLandmarks;
       const evalResult = PoseAnalyzer.evaluate(landmarks);
 
-      const skeleton = PoseAnalyzer.renderSkeleton(landmarks, 360, 480);
+      // 原画 + 注釈オーバーレイ
+      const W = 360, H = 480;
+      const annotated = PoseAnalyzer.renderAnnotated(landmarks, source, W, H, { plumbLine: true, labels: true });
       const result = $("result-canvas");
-      result.width = skeleton.width;
-      result.height = skeleton.height;
-      result.getContext("2d").drawImage(skeleton, 0, 0);
+      result.width = W; result.height = H;
+      result.getContext("2d").drawImage(annotated, 0, 0);
 
-      $("score-value").textContent = evalResult.score;
-      const metricsEl = $("metrics");
-      metricsEl.innerHTML = "";
-      evalResult.metrics.forEach((m) => {
-        const li = document.createElement("li");
-        li.innerHTML = `<span>${m.label}</span><span>${m.value} / 25 <small style="color:var(--text-sub)">(raw ${m.raw.toFixed(3)})</small></span>`;
-        metricsEl.appendChild(li);
-      });
+      // メタ
+      const meta = $("result-meta");
+      meta.innerHTML = "";
+      const q = evalResult.quality;
+      meta.innerHTML = `
+        <span class="chip">アングル: <strong>${labelOfView(q.view)}</strong></span>
+        <span class="chip">全身可視: <strong>${q.fullBody ? "✓" : "✗"}</strong></span>
+        <span class="chip">立位判定: <strong>${q.standing ? "✓" : "✗"}</strong></span>
+      `;
 
+      // 警告
+      const warn = $("quality-warning");
+      if (q.warnings.length) {
+        warn.classList.remove("hidden");
+        warn.classList.toggle("danger", !q.canScore);
+        warn.innerHTML = `<strong>${q.canScore ? "注意" : "評価不可"}</strong><ul>${q.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul>`;
+      } else {
+        warn.classList.add("hidden");
+      }
+
+      // スコア
+      if (q.canScore && evalResult.score != null) {
+        $("score-value").textContent = evalResult.score;
+        $("score-sub").textContent = "コア4指標（肩・骨盤・頭部偏位・体幹）の重症度合算";
+      } else {
+        $("score-value").textContent = "—";
+        $("score-sub").textContent = "撮影品質要件を満たしていないため、スコアは算出していません。";
+      }
+
+      // 計測値テーブル
+      const table = $("metrics-table");
+      table.innerHTML = "";
+      evalResult.metrics.forEach((m) => table.appendChild(renderMetricRow(m)));
+
+      // パターン
+      const pList = $("patterns-list");
+      pList.innerHTML = "";
+      if (evalResult.patterns && evalResult.patterns.length) {
+        evalResult.patterns.forEach((p) => {
+          const div = document.createElement("div");
+          div.className = "pattern-item";
+          div.textContent = p;
+          pList.appendChild(div);
+        });
+      } else if (q.canScore) {
+        pList.innerHTML = '<p class="empty">特筆すべき左右差・偏位は検出されませんでした。</p>';
+      } else {
+        pList.innerHTML = '<p class="empty">評価対象外のため、パターン判定は行っていません。</p>';
+      }
+
+      $("kendall-note").textContent = evalResult.kendallNote || "";
+
+      // デバッグ情報
       $("debug-info").textContent = JSON.stringify({
-        score: evalResult.score,
         sourceSize: `${sourceWidth} x ${sourceHeight}`,
+        quality: q,
+        score: evalResult.score,
         metrics: evalResult.metrics,
-        landmarkCount: landmarks.length,
-        sampleLandmarks: {
-          nose: landmarks[0],
-          leftShoulder: landmarks[11],
-          rightShoulder: landmarks[12],
-          leftHip: landmarks[23],
-          rightHip: landmarks[24],
-        },
+        patterns: evalResult.patterns,
       }, null, 2);
 
       setStatus("");
@@ -84,6 +133,20 @@
     } finally {
       hideLoading();
     }
+  }
+
+  function renderMetricRow(m) {
+    const div = document.createElement("div");
+    div.className = "metric-row";
+    const sign = m.valueDeg > 0 ? "+" : "";
+    const [lo, hi] = m.normalRangeDeg;
+    div.innerHTML = `
+      <div class="name">${escapeHtml(m.label)}<small>${escapeHtml(m.clinicalName)}</small></div>
+      <div class="value">${sign}${m.valueDeg}°<small>正常域 ${lo}°〜${hi}°</small></div>
+      <div class="badge badge-${m.severity}">${escapeHtml(m.severityLabel)}</div>
+      <div class="explanation">${escapeHtml(m.direction)} ／ ${escapeHtml(m.explanation)}</div>
+    `;
+    return div;
   }
 
   async function shootFromCamera() {

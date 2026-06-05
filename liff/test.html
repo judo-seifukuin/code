@@ -59,18 +59,44 @@
 
     <section id="view-result" class="view hidden">
       <h2>解析結果</h2>
+
+      <div id="quality-warning" class="warning hidden"></div>
+
+      <div class="result-meta" id="result-meta"></div>
+
       <div class="result-area">
         <canvas id="result-canvas"></canvas>
         <div class="score-box">
-          <div class="score-label">姿勢スコア</div>
+          <div class="score-label">総合姿勢スコア（正面立位 / 100点満点）</div>
           <div class="score-value" id="score-value">--</div>
-          <ul class="metrics" id="metrics"></ul>
+          <div class="score-sub" id="score-sub"></div>
         </div>
       </div>
-      <details style="margin-top: 12px; font-size: 12px;">
-        <summary style="cursor: pointer; color: var(--text-sub);">デバッグ情報を表示</summary>
-        <pre id="debug-info" style="overflow-x: auto; background: var(--bg); padding: 8px; border-radius: 6px; font-size: 11px;"></pre>
+
+      <details class="panel" open>
+        <summary>計測値（°）と正常域</summary>
+        <div class="metrics-table" id="metrics-table"></div>
       </details>
+
+      <details class="panel">
+        <summary>検出された姿勢パターン</summary>
+        <div id="patterns-list" class="patterns-list"></div>
+      </details>
+
+      <details class="panel">
+        <summary>評価方法と限界（必読）</summary>
+        <div class="methodology">
+          <p>計測は MediaPipe Pose（33点ランドマーク）に基づきます。各指標は文献参考値を用いた簡易スクリーニングで、診断・治療を示すものではありません。</p>
+          <p id="kendall-note"></p>
+          <p>詳細: <a href="https://github.com/judo-seifukuin/code/blob/main/docs/scoring.md" target="_blank" rel="noopener">スコアリング方法論</a></p>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>デバッグ情報（開発用）</summary>
+        <pre id="debug-info" style="overflow-x: auto; background: var(--bg); padding: 10px; font-size: 10px; margin: 0;"></pre>
+      </details>
+
       <div class="buttons">
         <button id="btn-retake" class="primary">もう一度</button>
       </div>
