@@ -380,7 +380,7 @@
 
   // ===== 可視化 =====
   // 原画 + 半透明スケルトン + 主要ランドマーク ラベル を1枚に描く
-  function renderAnnotated(landmarks, originalCanvasOrImage, width, height, opts) {
+  function renderAnnotated(landmarks, originalCanvasOrImage, width, height, opts, evalResult) {
     opts = opts || {};
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -397,6 +397,19 @@
       ctx.fillRect(0, 0, width, height);
     }
 
+    // 未来の姿勢ゴースト（メイン骨格より先に描画）
+    if (opts.futureGhost && evalResult) {
+      const factor = typeof opts.futureGhost === "number" ? opts.futureGhost : 1.6;
+      const future = projectFuturePosture(landmarks, evalResult, factor);
+      drawFutureGhost(ctx, future, width, height);
+    }
+
+    // 筋肉ストレスヒートマップ（骨格より下層）
+    if (opts.heatmap && evalResult) {
+      drawHeatmap(ctx, landmarks, evalResult, width, height);
+    }
+
+    // メイン骨格描画
     if (typeof drawConnectors === "function" && typeof POSE_CONNECTIONS !== "undefined") {
       drawConnectors(ctx, landmarks, POSE_CONNECTIONS, {
         color: "rgba(6, 199, 85, 0.85)",
@@ -434,6 +447,16 @@
       }
     }
 
+    // 部位別プラムライン（耳・肩・腰・足首中点から、肩中点垂線への横方向オフセットを表示）
+    if (opts.partPlumbLines) {
+      drawPartPlumbLines(ctx, landmarks, width, height);
+    }
+
+    // 左右歪みの矢印
+    if (opts.arrows && evalResult) {
+      drawImbalanceArrows(ctx, landmarks, evalResult, width, height);
+    }
+
     // 主要点のラベル
     if (opts.labels !== false) {
       ctx.font = "bold 11px sans-serif";
@@ -451,6 +474,272 @@
     }
 
     return canvas;
+  }
+
+  // ===== Phase 3a 可視化レイヤー =====
+
+  // 推定肩幅 38cm を基準に、ピクセル→センチを概算
+  function cmFromNormalizedDx(normDx, shoulderWidthNormalized) {
+    if (!shoulderWidthNormalized || shoulderWidthNormalized < 1e-6) return 0;
+    return (normDx / shoulderWidthNormalized) * 38;
+  }
+
+  // 部位別プラムライン: 主要中点（耳・肩・腰・膝・足首）から中心垂線への横方向オフセットを可視化
+  function drawPartPlumbLines(ctx, landmarks, width, height) {
+    const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+    const lh = landmarks[LM.LEFT_HIP], rh = landmarks[LM.RIGHT_HIP];
+    if (!ls || !rs || !lh || !rh) return;
+
+    const sMid = mid(ls, rs);
+    const shoulderWidth = Math.abs(ls.x - rs.x) || 0.2;
+    const centerX = sMid.x * width;
+
+    const parts = [
+      { label: "耳", point: midSafe(landmarks[LM.LEFT_EAR], landmarks[LM.RIGHT_EAR]) },
+      { label: "肩", point: sMid },
+      { label: "腰", point: mid(lh, rh) },
+      { label: "膝", point: midSafe(landmarks[LM.LEFT_KNEE], landmarks[LM.RIGHT_KNEE]) },
+      { label: "足首", point: midSafe(landmarks[LM.LEFT_ANKLE], landmarks[LM.RIGHT_ANKLE]) },
+    ].filter((p) => p.point);
+
+    ctx.font = "bold 10px sans-serif";
+    parts.forEach(({ label, point }) => {
+      const px = point.x * width;
+      const py = point.y * height;
+      const offsetCm = cmFromNormalizedDx(point.x - sMid.x, shoulderWidth);
+
+      // 水平オフセットバー
+      ctx.strokeStyle = Math.abs(offsetCm) > 1.5 ? "rgba(229,57,53,0.85)" : "rgba(33,150,243,0.6)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(centerX, py);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // ラベル: 部位名 + オフセット(cm)
+      const text = `${label} ${offsetCm > 0 ? "+" : ""}${offsetCm.toFixed(1)}cm`;
+      const tx = px + (point.x > sMid.x ? 6 : -6 - ctx.measureText(text).width);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.fillStyle = "#fff";
+      ctx.strokeText(text, tx, py + 3);
+      ctx.fillText(text, tx, py + 3);
+    });
+  }
+
+  function midSafe(a, b) {
+    if (!a || !b) return null;
+    return mid(a, b);
+  }
+
+  // 左右歪みの矢印: 重症度が normal でない指標について、関連ランドマーク近傍に矢印アニメーション風の表示
+  function drawImbalanceArrows(ctx, landmarks, evalResult, width, height) {
+    if (!evalResult.metrics) return;
+    const m = Object.fromEntries(evalResult.metrics.map((x) => [x.key, x]));
+
+    // 肩の傾き
+    if (m.shoulder_tilt && m.shoulder_tilt.severity !== "normal") {
+      const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+      const higher = ls.y < rs.y ? ls : rs;
+      const lower = ls.y < rs.y ? rs : ls;
+      drawArrow(ctx, higher.x * width, higher.y * height - 28, higher.x * width, higher.y * height - 8, "#e53935", `↑ ${Math.abs(m.shoulder_tilt.valueDeg)}°`);
+      drawArrow(ctx, lower.x * width, lower.y * height + 8, lower.x * width, lower.y * height + 28, "#1976d2", `↓`);
+    }
+    // 骨盤の傾き
+    if (m.pelvic_tilt && m.pelvic_tilt.severity !== "normal") {
+      const lh = landmarks[LM.LEFT_HIP], rh = landmarks[LM.RIGHT_HIP];
+      const higher = lh.y < rh.y ? lh : rh;
+      const lower = lh.y < rh.y ? rh : lh;
+      drawArrow(ctx, higher.x * width, higher.y * height - 26, higher.x * width, higher.y * height - 6, "#e53935", `↑ ${Math.abs(m.pelvic_tilt.valueDeg)}°`);
+      drawArrow(ctx, lower.x * width, lower.y * height + 6, lower.x * width, lower.y * height + 26, "#1976d2", `↓`);
+    }
+    // 頭部の左右偏位
+    if (m.head_lateral && m.head_lateral.severity !== "normal") {
+      const nose = landmarks[LM.NOSE];
+      const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+      const cx = ((ls.x + rs.x) / 2) * width;
+      const nx = nose.x * width;
+      const ny = nose.y * height;
+      const dir = nx > cx ? 1 : -1;
+      drawArrow(ctx, nx, ny - 24, nx + dir * 30, ny - 24, "#e53935", `${dir > 0 ? "→" : "←"} ${Math.abs(m.head_lateral.valueDeg)}°`);
+    }
+    // 体幹の左右傾き
+    if (m.trunk_tilt && m.trunk_tilt.severity !== "normal") {
+      const lh = landmarks[LM.LEFT_HIP], rh = landmarks[LM.RIGHT_HIP];
+      const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+      const top = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+      const bot = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+      const dir = top.x > bot.x ? 1 : -1;
+      ctx.strokeStyle = "#e53935";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(bot.x * width, bot.y * height);
+      ctx.lineTo(top.x * width, top.y * height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      labelOnCanvas(ctx, `体幹傾斜 ${dir > 0 ? "→" : "←"} ${Math.abs(m.trunk_tilt.valueDeg)}°`, ((top.x + bot.x) / 2) * width + 6, ((top.y + bot.y) / 2) * height);
+    }
+  }
+
+  function drawArrow(ctx, fromX, fromY, toX, toY, color, label) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+    // 矢印先
+    const angle = Math.atan2(toY - fromY, toX - fromX);
+    const ah = 6;
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - ah * Math.cos(angle - Math.PI / 6), toY - ah * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(toX - ah * Math.cos(angle + Math.PI / 6), toY - ah * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+    if (label) {
+      labelOnCanvas(ctx, label, toX + 4, toY - 2);
+    }
+  }
+
+  function labelOnCanvas(ctx, text, x, y) {
+    ctx.font = "bold 11px sans-serif";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.75)";
+    ctx.fillStyle = "#fff";
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  }
+
+  // 筋肉ストレスヒートマップ: パターンに応じて該当筋群相当の領域に放射状グラデーションを重ねる
+  function drawHeatmap(ctx, landmarks, evalResult, width, height) {
+    const m = Object.fromEntries((evalResult.metrics || []).map((x) => [x.key, x]));
+
+    const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+    const lh = landmarks[LM.LEFT_HIP], rh = landmarks[LM.RIGHT_HIP];
+    const le = landmarks[LM.LEFT_EAR], re = landmarks[LM.RIGHT_EAR];
+    if (!ls || !rs || !lh || !rh) return;
+
+    const blob = (cx, cy, radius, intensity) => {
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      const alpha = Math.min(0.55, 0.15 + intensity * 0.4);
+      g.addColorStop(0, `rgba(229,57,53,${alpha})`);
+      g.addColorStop(0.6, `rgba(229,57,53,${alpha * 0.5})`);
+      g.addColorStop(1, "rgba(229,57,53,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    };
+
+    const sevIntensity = { mild: 0.35, moderate: 0.7, severe: 1.0 };
+
+    // 肩の傾き → 高い側の僧帽筋上部
+    if (m.shoulder_tilt && m.shoulder_tilt.severity !== "normal") {
+      const i = sevIntensity[m.shoulder_tilt.severity] || 0.3;
+      const higher = ls.y < rs.y ? ls : rs;
+      const ear = ls.y < rs.y ? le : re;
+      const cx = ((higher.x + (ear ? ear.x : higher.x)) / 2) * width;
+      const cy = ((higher.y + (ear ? ear.y : higher.y)) / 2) * height;
+      blob(cx, cy, width * 0.12, i);
+    }
+
+    // 骨盤の傾き → 高い側の腰方形筋・脊柱起立筋
+    if (m.pelvic_tilt && m.pelvic_tilt.severity !== "normal") {
+      const i = sevIntensity[m.pelvic_tilt.severity] || 0.3;
+      const higher = lh.y < rh.y ? lh : rh;
+      const sho = lh.y < rh.y ? ls : rs;
+      const cx = ((higher.x * 0.6 + sho.x * 0.4)) * width;
+      const cy = ((higher.y * 0.55 + sho.y * 0.45)) * height;
+      blob(cx, cy, width * 0.13, i);
+    }
+
+    // 頭部の左右傾斜 → 上がっている耳側の胸鎖乳突筋・斜角筋
+    if (m.head_tilt && m.head_tilt.severity !== "normal") {
+      const i = sevIntensity[m.head_tilt.severity] || 0.3;
+      const higher = le.y < re.y ? le : re;
+      const sho = le.y < re.y ? ls : rs;
+      const cx = ((higher.x * 0.4 + sho.x * 0.6)) * width;
+      const cy = ((higher.y * 0.5 + sho.y * 0.5)) * height;
+      blob(cx, cy, width * 0.09, i);
+    }
+
+    // 体幹の左右傾斜 → 凹側の腹斜筋・QL
+    if (m.trunk_tilt && m.trunk_tilt.severity !== "normal") {
+      const i = sevIntensity[m.trunk_tilt.severity] || 0.3;
+      const sMid = mid(ls, rs), hMid = mid(lh, rh);
+      // top が hMid より右なら、凸側は左、凹側は右
+      const concaveSide = sMid.x > hMid.x ? "right" : "left";
+      const sho = concaveSide === "right" ? rs : ls;
+      const hip = concaveSide === "right" ? rh : lh;
+      const cx = ((sho.x + hip.x) / 2) * width;
+      const cy = ((sho.y + hip.y) / 2) * height;
+      blob(cx, cy, width * 0.11, i);
+    }
+  }
+
+  // 〇年後の姿勢ゴースト: 各指標の偏位を factor 倍に増幅した骨格を半透明で重ねる
+  function projectFuturePosture(landmarks, evalResult, factor) {
+    const future = landmarks.map((lm) => ({ x: lm.x, y: lm.y, z: lm.z || 0, visibility: lm.visibility }));
+    if (!evalResult || !evalResult.quality || !evalResult.quality.canScore) return future;
+
+    const m = Object.fromEntries((evalResult.metrics || []).map((x) => [x.key, x]));
+
+    // 肩線の傾きを (factor) 倍に増幅 → 肩中点まわりに回転
+    if (m.shoulder_tilt) {
+      const ls = future[LM.LEFT_SHOULDER], rs = future[LM.RIGHT_SHOULDER];
+      const sMid = mid(ls, rs);
+      const extra = m.shoulder_tilt.valueDeg * (factor - 1);
+      rotatePointDeg(ls, sMid, extra);
+      rotatePointDeg(rs, sMid, extra);
+    }
+    // 骨盤線の傾き
+    if (m.pelvic_tilt) {
+      const lh = future[LM.LEFT_HIP], rh = future[LM.RIGHT_HIP];
+      const hMid = mid(lh, rh);
+      const extra = m.pelvic_tilt.valueDeg * (factor - 1);
+      rotatePointDeg(lh, hMid, extra);
+      rotatePointDeg(rh, hMid, extra);
+    }
+    // 頭部の側方偏位: 鼻と耳を肩中点に対してさらに横にずらす
+    if (m.head_lateral) {
+      const ls = future[LM.LEFT_SHOULDER], rs = future[LM.RIGHT_SHOULDER];
+      const sMid = mid(ls, rs);
+      const shoulderWidth = Math.abs(ls.x - rs.x) || 0.2;
+      const currentRatio = (future[LM.NOSE].x - sMid.x) / shoulderWidth;
+      const extraDx = currentRatio * shoulderWidth * (factor - 1);
+      [LM.NOSE, LM.LEFT_EAR, LM.RIGHT_EAR, LM.LEFT_EYE, LM.RIGHT_EYE].forEach((i) => {
+        if (future[i]) future[i].x += extraDx;
+      });
+    }
+    return future;
+  }
+
+  function rotatePointDeg(p, pivot, deg) {
+    const rad = deg * Math.PI / 180;
+    const dx = p.x - pivot.x;
+    const dy = p.y - pivot.y;
+    const c = Math.cos(rad), s = Math.sin(rad);
+    p.x = pivot.x + dx * c - dy * s;
+    p.y = pivot.y + dx * s + dy * c;
+  }
+
+  function drawFutureGhost(ctx, futureLandmarks, width, height) {
+    if (typeof drawConnectors === "function" && typeof POSE_CONNECTIONS !== "undefined") {
+      drawConnectors(ctx, futureLandmarks, POSE_CONNECTIONS, {
+        color: "rgba(244, 67, 54, 0.5)",
+        lineWidth: 4,
+      });
+    }
+    if (typeof drawLandmarks === "function") {
+      drawLandmarks(ctx, futureLandmarks, {
+        color: "rgba(244, 67, 54, 0.6)",
+        lineWidth: 1,
+        radius: 3,
+      });
+    }
   }
 
   // 既存コードとの互換のためのシンプル骨格描画

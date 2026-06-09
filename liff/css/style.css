@@ -334,6 +334,34 @@ button.secondary {
   margin-top: 4px;
 }
 
+.layer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 8px;
+  font-size: 12px;
+  margin: 12px 0;
+  align-items: center;
+}
+.layer-controls .layer-title {
+  font-weight: 600;
+  color: var(--text-sub);
+  font-size: 11px;
+}
+.layer-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.layer-controls input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
 .panel {
   margin-top: 12px;
   border: 1px solid var(--secondary);
