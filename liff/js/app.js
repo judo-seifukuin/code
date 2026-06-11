@@ -10,6 +10,10 @@
     userId: null,
     stream: null,
     lastAnalysis: null, // { score, metrics, landmarks, skeletonB64 }
+    lastOriginalCanvas: null,
+    lastLandmarks: null,
+    lastEvalResult: null,
+    layers: { arrows: false, partPlumbLines: false, heatmap: false, futureGhost: false },
   };
 
   // ---- 画面遷移 ----
@@ -117,12 +121,10 @@
 
   // ---- 結果レンダラ ----
   function renderResult(landmarks, evalResult, originalCanvas) {
-    const W = 360, H = 480;
-    const canvas = $("result-canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const annotated = PoseAnalyzer.renderAnnotated(landmarks, originalCanvas, W, H, { plumbLine: true, labels: true });
-    canvas.getContext("2d").drawImage(annotated, 0, 0);
+    state.lastOriginalCanvas = originalCanvas;
+    state.lastLandmarks = landmarks;
+    state.lastEvalResult = evalResult;
+    redrawCanvas();
 
     // メタ（撮影アングル / 全身 / 立位 等）
     const meta = $("result-meta");
@@ -179,6 +181,26 @@
     }
 
     $("kendall-note").textContent = evalResult.kendallNote || "";
+  }
+
+  function redrawCanvas() {
+    if (!state.lastLandmarks) return;
+    const W = 360, H = 480;
+    const canvas = $("result-canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const opts = {
+      plumbLine: true,
+      labels: true,
+      arrows: state.layers.arrows,
+      partPlumbLines: state.layers.partPlumbLines,
+      heatmap: state.layers.heatmap,
+      futureGhost: state.layers.futureGhost ? 1.6 : false,
+    };
+    const annotated = PoseAnalyzer.renderAnnotated(
+      state.lastLandmarks, state.lastOriginalCanvas, W, H, opts, state.lastEvalResult
+    );
+    canvas.getContext("2d").drawImage(annotated, 0, 0);
   }
 
   function renderMetricRow(m) {
@@ -378,6 +400,13 @@
     });
     $("btn-compare-back").addEventListener("click", () => {
       showView("view-history");
+    });
+    // レイヤートグル
+    document.querySelectorAll("#layer-controls input[data-layer]").forEach((cb) => {
+      cb.addEventListener("change", (e) => {
+        state.layers[e.target.dataset.layer] = e.target.checked;
+        redrawCanvas();
+      });
     });
   }
 

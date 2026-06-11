@@ -4,7 +4,13 @@
 
   const $ = (id) => document.getElementById(id);
   const VIEWS = ["view-start", "view-capture", "view-result"];
-  const state = { stream: null };
+  const state = {
+    stream: null,
+    lastSource: null,
+    lastLandmarks: null,
+    lastEvalResult: null,
+    layers: { arrows: false, partPlumbLines: false, heatmap: false, futureGhost: false },
+  };
 
   function showView(id) {
     VIEWS.forEach((v) => $(v).classList.toggle("hidden", v !== id));
@@ -56,12 +62,10 @@
       const landmarks = results.poseLandmarks;
       const evalResult = PoseAnalyzer.evaluate(landmarks);
 
-      // 原画 + 注釈オーバーレイ
-      const W = 360, H = 480;
-      const annotated = PoseAnalyzer.renderAnnotated(landmarks, source, W, H, { plumbLine: true, labels: true });
-      const result = $("result-canvas");
-      result.width = W; result.height = H;
-      result.getContext("2d").drawImage(annotated, 0, 0);
+      state.lastSource = source;
+      state.lastLandmarks = landmarks;
+      state.lastEvalResult = evalResult;
+      redrawCanvas();
 
       // メタ
       const meta = $("result-meta");
@@ -133,6 +137,25 @@
     } finally {
       hideLoading();
     }
+  }
+
+  function redrawCanvas() {
+    if (!state.lastLandmarks) return;
+    const W = 360, H = 480;
+    const opts = {
+      plumbLine: true,
+      labels: true,
+      arrows: state.layers.arrows,
+      partPlumbLines: state.layers.partPlumbLines,
+      heatmap: state.layers.heatmap,
+      futureGhost: state.layers.futureGhost ? 1.6 : false,
+    };
+    const annotated = PoseAnalyzer.renderAnnotated(
+      state.lastLandmarks, state.lastSource, W, H, opts, state.lastEvalResult
+    );
+    const result = $("result-canvas");
+    result.width = W; result.height = H;
+    result.getContext("2d").drawImage(annotated, 0, 0);
   }
 
   function renderMetricRow(m) {
@@ -227,6 +250,13 @@
     $("btn-retake").addEventListener("click", () => {
       setStatus("");
       showView("view-start");
+    });
+    // レイヤートグル
+    document.querySelectorAll("#layer-controls input[data-layer]").forEach((cb) => {
+      cb.addEventListener("change", (e) => {
+        state.layers[e.target.dataset.layer] = e.target.checked;
+        redrawCanvas();
+      });
     });
   }
 
