@@ -62,37 +62,81 @@
 
       <div id="quality-warning" class="warning hidden"></div>
 
-      <div class="result-meta" id="result-meta"></div>
-
-      <div class="result-area">
-        <canvas id="result-canvas"></canvas>
-        <div class="score-box">
-          <div class="score-label">総合姿勢スコア（正面立位 / 100点満点）</div>
-          <div class="score-value" id="score-value">--</div>
-          <div class="score-sub" id="score-sub"></div>
+      <!-- 段①: 結論 -->
+      <div id="conclusion" class="conclusion">
+        <div class="conclusion-score">
+          <span class="score-num" id="score-value">--</span>
+          <span class="score-status" id="score-status"></span>
         </div>
+        <div class="conclusion-summary" id="score-summary"></div>
+        <div class="conclusion-stats" id="score-stats"></div>
       </div>
 
-      <div class="layer-controls" id="layer-controls">
-        <span class="layer-title">表示レイヤー</span>
-        <label><input type="checkbox" data-layer="arrows" /> 歪み矢印</label>
-        <label><input type="checkbox" data-layer="partPlumbLines" /> 部位別プラム</label>
-        <label><input type="checkbox" data-layer="heatmap" /> 筋肉ヒートマップ</label>
-        <label><input type="checkbox" data-layer="futureGhost" /> ◯年後の姿勢</label>
+      <!-- 段②: 今日のひとこと -->
+      <div id="takeaway" class="takeaway">
+        <div class="takeaway-title">💬 今日のひとこと</div>
+        <div class="takeaway-body" id="takeaway-body"></div>
+        <div class="takeaway-action" id="takeaway-action"></div>
       </div>
 
-      <details class="panel" open>
-        <summary>計測値（°）と正常域</summary>
+      <!-- B: 結果の見方ガイド -->
+      <details class="panel">
+        <summary>📖 結果の見方ガイド</summary>
+        <div class="guide">
+          <h4>スコアの読み方</h4>
+          <ul>
+            <li><strong>90以上 🟢 良好</strong> — そのままケアを継続</li>
+            <li><strong>80〜89 🟢 概ね良好</strong> — 軽い癖あり、予防を意識</li>
+            <li><strong>70〜79 🟡 要観察</strong> — ケア開始時期</li>
+            <li><strong>60〜69 🟠 要ケア</strong> — 定期的な施術推奨</li>
+            <li><strong>59以下 🔴 要相談</strong> — 個別相談が必要</li>
+          </ul>
+          <h4>重症度バッジ</h4>
+          <ul>
+            <li><span class="badge badge-normal">正常域</span> 理想範囲内</li>
+            <li><span class="badge badge-mild">軽度</span> わずかなズレ、要観察</li>
+            <li><span class="badge badge-moderate">中等度</span> 明らかな偏位、ケア推奨</li>
+            <li><span class="badge badge-severe">顕著</span> 大きなズレ、優先対応</li>
+          </ul>
+          <h4>骨格画像の見方</h4>
+          <ul>
+            <li>青破線: 垂直基準（プラムライン）</li>
+            <li>緑線: 検出された骨格</li>
+            <li>赤点: 各ランドマーク</li>
+          </ul>
+          <h4>「今日のひとこと」とは</h4>
+          <p>最も問題のある指標から「観察」「考えられる原因」「おすすめ対応」を生成します。詳しく分析したい場合は下の各パネルを展開してください。</p>
+        </div>
+      </details>
+
+      <!-- 段③: 詳細パネル（折りたたみ） -->
+      <details class="panel">
+        <summary>🖼️ 骨格画像と撮影情報</summary>
+        <div class="result-area">
+          <canvas id="result-canvas"></canvas>
+        </div>
+        <div class="layer-controls" id="layer-controls">
+          <span class="layer-title">表示レイヤー</span>
+          <label><input type="checkbox" data-layer="arrows" /> 歪み矢印</label>
+          <label><input type="checkbox" data-layer="partPlumbLines" /> 部位別プラム</label>
+          <label><input type="checkbox" data-layer="heatmap" /> 筋肉ヒートマップ</label>
+          <label><input type="checkbox" data-layer="futureGhost" /> ◯年後の姿勢</label>
+        </div>
+        <div class="result-meta" id="result-meta"></div>
+      </details>
+
+      <details class="panel">
+        <summary>📐 計測値（°）と正常域</summary>
         <div class="metrics-table" id="metrics-table"></div>
       </details>
 
       <details class="panel">
-        <summary>検出された姿勢パターン</summary>
+        <summary>🔍 検出された姿勢パターン</summary>
         <div id="patterns-list" class="patterns-list"></div>
       </details>
 
       <details class="panel">
-        <summary>評価方法と限界（必読）</summary>
+        <summary>📚 評価方法と限界（必読）</summary>
         <div class="methodology">
           <p>計測は MediaPipe Pose（33点ランドマーク）に基づきます。各指標は文献参考値を用いた簡易スクリーニングで、診断・治療を示すものではありません。</p>
           <p id="kendall-note"></p>
@@ -101,7 +145,7 @@
       </details>
 
       <details class="panel">
-        <summary>デバッグ情報（開発用）</summary>
+        <summary>🛠️ デバッグ情報（開発用）</summary>
         <pre id="debug-info" style="overflow-x: auto; background: var(--bg); padding: 10px; font-size: 10px; margin: 0;"></pre>
       </details>
 

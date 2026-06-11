@@ -202,7 +202,7 @@
     return { normal: 25, mild: 18, moderate: 10, severe: 3 }[sev] || 0;
   }
   function severityLabel(sev) {
-    return { normal: "正常域", mild: "軽度", moderate: "中等度", severe: "高度" }[sev] || sev;
+    return { normal: "正常域", mild: "軽度", moderate: "中等度", severe: "顕著" }[sev] || sev;
   }
 
   // ===== 臨床メトリクス（正面立位） =====
@@ -217,18 +217,23 @@
 
     const sM = mid(ls, rs), hM = mid(lh, rh);
 
-    // 1) 肩線傾斜角（参考正常域 ±2°）
-    const shoulderTilt = lineTiltDeg(ls, rs);
-    // 2) 骨盤線傾斜角（参考正常域 ±2°）
-    const pelvicTilt = lineTiltDeg(lh, rh);
-    // 3) 頭部側方偏位: 鼻のx位置と肩中点のx差を肩幅で正規化、角度換算（参考 ±3°）
+    // 解剖学的「右」を統一的にプラスとして扱うため、|dx| で正規化する。
+    // 解剖学的右側の点（rs/rh/re）が画像内で「より高い位置」にあるとき値はプラスになる。
+    // 1) 肩線傾斜角（解剖学的右上がりが正、参考正常域 ±2°）
+    const shoulderTilt = toDeg(Math.atan2(ls.y - rs.y, Math.abs(rs.x - ls.x) || 1e-9));
+    // 2) 骨盤線傾斜角（解剖学的右上がりが正、参考正常域 ±2°）
+    const pelvicTilt = toDeg(Math.atan2(lh.y - rh.y, Math.abs(rh.x - lh.x) || 1e-9));
+    // 3) 頭部側方偏位: 鼻のx位置と肩中点のx差。解剖学的右=画像左側なので符号反転して
+    //    「鼻が解剖学的右へ偏位」を正とする。
     const shoulderWidth = Math.hypot(ls.x - rs.x, ls.y - rs.y) || 1e-9;
-    const headLateralShiftRatio = (nose.x - sM.x) / shoulderWidth;
+    const headLateralShiftRatio = (sM.x - nose.x) / shoulderWidth;
     const headLateralDeg = toDeg(Math.atan(headLateralShiftRatio));
     // 4) 体幹軸の傾き（肩中点→骨盤中点、垂直から ±2°）
+    //    現状の計算: hM.x > sM.x のとき正。これは肩が画像左=解剖学的右へ寄ることを意味し
+    //    「上体が解剖学的右へ傾斜」と一致するため変更なし。
     const trunkTilt = lineFromVerticalDeg(sM, hM);
-    // 5) 頭部傾斜（左右耳の傾斜、参考 ±2°）
-    const headTilt = lineTiltDeg(le, re);
+    // 5) 頭部側方傾斜（左右耳線、解剖学的右耳が高い場合が正、参考 ±2°）
+    const headTilt = toDeg(Math.atan2(le.y - re.y, Math.abs(re.x - le.x) || 1e-9));
     // 6) 膝アライメント: 左右の膝のX字/O字傾向 — Q角の簡易代替
     //    両膝中点と両足首中点のずれを骨盤幅で正規化
     const kneeMid = mid(lk, rk), ankleMid = mid(la, ra);
@@ -282,8 +287,8 @@
         clinicalName: "頭部側方傾斜 (head lateral tilt)",
         valueDeg: headTilt,
         normalAbsDeg: 2,
-        positiveSide: "右下がり",
-        negativeSide: "左下がり",
+        positiveSide: "右耳上がり（頭は左へ側屈）",
+        negativeSide: "左耳上がり（頭は右へ側屈）",
         explanation: "両耳を結ぶ線の水平からの傾き。胸鎖乳突筋・斜角筋の左右差で増大します。",
       }),
       buildMetric({
@@ -350,6 +355,87 @@
     return patterns;
   }
 
+  // ===== ステータス・サマリ・ひとこと =====
+  const TARGET_SCORE = 85;
+  const SEV_RANK = { normal: 0, mild: 1, moderate: 2, severe: 3 };
+  const CORE_KEYS = ["shoulder_tilt", "pelvic_tilt", "head_lateral", "trunk_tilt"];
+
+  function statusForScore(score) {
+    if (score == null) return { icon: "—", label: "評価不可", klass: "unavailable" };
+    if (score >= 90) return { icon: "🟢", label: "良好", klass: "good" };
+    if (score >= 80) return { icon: "🟢", label: "概ね良好", klass: "good" };
+    if (score >= 70) return { icon: "🟡", label: "要観察", klass: "fair" };
+    if (score >= 60) return { icon: "🟠", label: "要ケア", klass: "warn" };
+    return { icon: "🔴", label: "要相談", klass: "alert" };
+  }
+
+  // 「つまりなんという姿勢か」を1行で表現する
+  function buildSummaryLabel(metrics, score) {
+    if (!metrics.length) return "—";
+    const core = metrics.filter((m) => CORE_KEYS.includes(m.key));
+    const worst = [...core].sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity])[0];
+    if (!worst || worst.severity === "normal") {
+      if (score >= 95) return "ほぼ理想的な正面立位";
+      return "概ね均整のとれた正面立位";
+    }
+    const abn = core.filter((m) => m.severity !== "normal");
+    const tags = abn.map((m) => {
+      switch (m.key) {
+        case "shoulder_tilt": return `${m.direction}の肩`;
+        case "pelvic_tilt": return `${m.direction}の骨盤`;
+        case "head_lateral": return `頭部${m.direction}`;
+        case "trunk_tilt": return `体幹${m.direction}`;
+      }
+    }).filter(Boolean);
+    const sevWord = severityLabel(worst.severity);
+    if (tags.length === 1) return `${sevWord}な${tags[0]}傾向`;
+    if (tags.length === 2) return `${sevWord}な${tags.join("・")}傾向`;
+    return `複合姿勢（${tags.slice(0, 2).join("・")} など${tags.length}項目）`;
+  }
+
+  // 「今日のひとこと」: 観察 → 考えられる原因 → 推奨アクション
+  const TAKEAWAY_TEMPLATES = {
+    shoulder_tilt: {
+      observation: (m) => `${m.direction}に肩が ${Math.abs(m.valueDeg).toFixed(1)}° 傾いています。`,
+      cause: "利き腕の使い方の癖、肩甲帯の左右差、僧帽筋上部の緊張が考えられます。",
+      action: "肩のストレッチや肩甲骨周りのリリースを試してみましょう。",
+    },
+    pelvic_tilt: {
+      observation: (m) => `${m.direction}に骨盤が ${Math.abs(m.valueDeg).toFixed(1)}° 傾いています。`,
+      cause: "脚長差、立位時の荷重偏り、中殿筋の機能低下が考えられます。",
+      action: "骨盤調整と、中殿筋・内転筋のバランス調整を試みましょう。",
+    },
+    head_lateral: {
+      observation: (m) => `頭が中央から ${m.direction}（${Math.abs(m.valueDeg).toFixed(1)}°）にずれています。`,
+      cause: "頸椎の側屈や、優位眼・スマホ姿勢の影響が考えられます。",
+      action: "頸部ストレッチと、画面を正面で見る習慣づけが有効です。",
+    },
+    trunk_tilt: {
+      observation: (m) => `体幹が ${m.direction} に ${Math.abs(m.valueDeg).toFixed(1)}° 傾いています。`,
+      cause: "荷重の左右差、機能性側弯、外側支持機構の不均衡が考えられます。",
+      action: "左右均等な荷重を意識し、体幹周りの安定化エクササイズを。",
+    },
+  };
+  const NORMAL_TAKEAWAY = {
+    observation: "コア4指標すべてが正常域に収まっています。",
+    cause: "現状の姿勢は概ね均整がとれています。",
+    action: "この状態を維持するため、日々のストレッチを継続しましょう。",
+  };
+
+  function buildTakeaway(metrics) {
+    const core = metrics.filter((m) => CORE_KEYS.includes(m.key));
+    const abnormal = core.filter((m) => m.severity !== "normal");
+    if (!abnormal.length) return NORMAL_TAKEAWAY;
+    const worst = abnormal.sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity])[0];
+    const tpl = TAKEAWAY_TEMPLATES[worst.key];
+    if (!tpl) return NORMAL_TAKEAWAY;
+    return {
+      observation: tpl.observation(worst),
+      cause: tpl.cause,
+      action: tpl.action,
+    };
+  }
+
   // ===== 総合 evaluate() =====
   function evaluate(landmarks) {
     const quality = evaluateQuality(landmarks);
@@ -359,6 +445,10 @@
         score: null,
         metrics: [],
         patterns: [],
+        summaryLabel: null,
+        takeaway: null,
+        status: statusForScore(null),
+        targetScore: TARGET_SCORE,
         kendallNote: KENDALL_LIMITATION_NOTE,
       };
     }
@@ -368,6 +458,10 @@
       score: result.score,
       metrics: result.metrics,
       patterns: result.patterns,
+      summaryLabel: buildSummaryLabel(result.metrics, result.score),
+      takeaway: buildTakeaway(result.metrics),
+      status: statusForScore(result.score),
+      targetScore: TARGET_SCORE,
       kendallNote: KENDALL_LIMITATION_NOTE,
     };
   }

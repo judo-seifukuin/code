@@ -126,10 +126,11 @@
     state.lastEvalResult = evalResult;
     redrawCanvas();
 
-    // メタ（撮影アングル / 全身 / 立位 等）
+    const q = evalResult.quality;
+
+    // メタ（撮影アングル / 全身 / 立位）
     const meta = $("result-meta");
     meta.innerHTML = "";
-    const q = evalResult.quality;
     meta.appendChild(makeChip("撮影アングル", labelOfView(q.view)));
     meta.appendChild(makeChip("全身可視", q.fullBody ? "✓" : "✗"));
     meta.appendChild(makeChip("立位判定", q.standing ? "✓" : "✗"));
@@ -144,14 +145,15 @@
       warnEl.classList.add("hidden");
     }
 
-    // スコア
+    // 段①: 結論ブロック
+    renderConclusion(evalResult, null);
+    // 段②: 今日のひとこと
+    renderTakeaway(evalResult);
+
     if (q.canScore && evalResult.score != null) {
-      $("score-value").textContent = evalResult.score;
-      $("score-sub").textContent = "コア4指標（肩・骨盤・頭部偏位・体幹）の重症度合算";
       $("btn-save").disabled = false;
+      fetchAndRenderStats(evalResult); // 非同期で stats 取得して上書き
     } else {
-      $("score-value").textContent = "—";
-      $("score-sub").textContent = "撮影品質要件を満たしていないため、スコアは算出していません。";
       $("btn-save").disabled = true;
     }
 
@@ -183,6 +185,76 @@
     $("kendall-note").textContent = evalResult.kendallNote || "";
   }
 
+  // 段①: 結論ブロック（スコア+ステータス+一言サマリ+チップ）
+  function renderConclusion(evalResult, stats) {
+    const conc = $("conclusion");
+    conc.classList.remove("good", "fair", "warn", "alert", "unavailable");
+    const status = evalResult.status || { icon: "—", label: "—", klass: "unavailable" };
+    conc.classList.add(status.klass);
+    if (evalResult.quality.canScore && evalResult.score != null) {
+      $("score-value").textContent = evalResult.score;
+      $("score-status").textContent = `${status.icon} ${status.label}`;
+      $("score-summary").textContent = evalResult.summaryLabel || "";
+      $("score-summary").style.display = "";
+    } else {
+      $("score-value").textContent = "—";
+      $("score-status").textContent = "評価不可";
+      $("score-summary").textContent = "撮影品質要件を満たしていません";
+      $("score-summary").style.display = "";
+    }
+    renderConclusionStats(evalResult, stats);
+  }
+
+  function renderConclusionStats(evalResult, stats) {
+    const el = $("score-stats");
+    el.innerHTML = "";
+    if (!evalResult.quality.canScore) return;
+    const target = evalResult.targetScore || 85;
+    addStatChip(el, "目標", `${target}点以上`, "target");
+    if (stats && stats.user) {
+      if (stats.user.average != null) {
+        addStatChip(el, "あなたの平均", `${stats.user.average}点 (${stats.user.count}回)`);
+      }
+      if (stats.user.lastScore != null && evalResult.score != null) {
+        const diff = evalResult.score - stats.user.lastScore;
+        const sign = diff > 0 ? "+" : "";
+        const klass = diff > 0 ? "diff-up" : diff < 0 ? "diff-down" : "";
+        addStatChip(el, "前回比", `${sign}${diff}点`, klass);
+      }
+    }
+    if (stats && stats.clinic && stats.clinic.average != null) {
+      addStatChip(el, "院内平均", `${stats.clinic.average}点 (${stats.clinic.count}件)`);
+    }
+  }
+  function addStatChip(parent, label, value, klass) {
+    const span = document.createElement("span");
+    span.className = "stat-chip" + (klass ? " " + klass : "");
+    span.innerHTML = `${escapeHtml(label)}: <strong>${escapeHtml(value)}</strong>`;
+    parent.appendChild(span);
+  }
+  async function fetchAndRenderStats(evalResult) {
+    try {
+      const data = await callGas({ action: "stats", idToken: state.idToken });
+      renderConclusion(evalResult, data);
+    } catch (e) {
+      console.warn("stats取得失敗", e);
+    }
+  }
+
+  // 段②: 今日のひとこと
+  function renderTakeaway(evalResult) {
+    const t = evalResult.takeaway;
+    const takeawayBox = $("takeaway");
+    if (!t || !evalResult.quality.canScore) {
+      takeawayBox.style.display = "none";
+      return;
+    }
+    takeawayBox.style.display = "";
+    $("takeaway-body").innerHTML = `${escapeHtml(t.observation)}<br><span style="color:var(--text-sub);font-size:12px;">${escapeHtml(t.cause)}</span>`;
+    $("takeaway-action").textContent = "→ " + t.action;
+  }
+
+  // 骨格画像（段③内）の再描画。レイヤートグルが変わったときに呼ぶ。
   function redrawCanvas() {
     if (!state.lastLandmarks) return;
     const W = 360, H = 480;
