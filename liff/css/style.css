@@ -334,6 +334,43 @@ button.secondary {
   margin-top: 4px;
 }
 
+.score-summary {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 6px;
+  border-left: 4px solid var(--primary);
+  text-align: left;
+}
+
+.score-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 11px;
+  justify-content: center;
+}
+
+.score-stats .stat-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--secondary);
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+.score-stats .stat-chip strong { color: var(--text); }
+.score-stats .stat-chip.target { border-color: var(--primary); }
+.score-stats .stat-chip.target strong { color: var(--primary); }
+.score-stats .stat-chip.diff-up { border-color: var(--primary); color: var(--primary); }
+.score-stats .stat-chip.diff-up strong { color: var(--primary); }
+.score-stats .stat-chip.diff-down { border-color: var(--danger); color: var(--danger); }
+.score-stats .stat-chip.diff-down strong { color: var(--danger); }
+
 .panel {
   margin-top: 12px;
   border: 1px solid var(--secondary);

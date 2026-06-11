@@ -87,6 +87,47 @@ var Store_ = (function () {
     return { ok: true, records: records };
   }
 
+  // 統計集計: ユーザー個人 + 院内全体の平均スコア・回数・前回スコアを返す
+  function getStats(userId) {
+    const sheet = getSheet_();
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) {
+      return {
+        ok: true,
+        user: { count: 0, average: null, lastScore: null, lastAt: null },
+        clinic: { count: 0, average: null },
+      };
+    }
+    const values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    const allScores = [];
+    const mine = [];
+    values.forEach((r) => {
+      const sc = Number(r[3]);
+      if (!isFinite(sc)) return;
+      allScores.push(sc);
+      if (r[2] === userId) {
+        mine.push({ at: r[0], score: sc });
+      }
+    });
+    mine.sort((a, b) => (a.at < b.at ? 1 : -1)); // 新しい順
+
+    const avg = (arr) => arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+
+    return {
+      ok: true,
+      user: {
+        count: mine.length,
+        average: avg(mine.map((m) => m.score)),
+        lastScore: mine.length ? mine[0].score : null,
+        lastAt: mine.length ? (mine[0].at instanceof Date ? mine[0].at.toISOString() : String(mine[0].at)) : null,
+      },
+      clinic: {
+        count: allScores.length,
+        average: avg(allScores),
+      },
+    };
+  }
+
   function safeParse_(s, fallback) {
     try { return JSON.parse(s); } catch (e) { return fallback; }
   }
@@ -94,5 +135,6 @@ var Store_ = (function () {
   return {
     saveRecord: saveRecord,
     getHistory: getHistory,
+    getStats: getStats,
   };
 })();

@@ -191,7 +191,7 @@
   }
 
   // ===== 重症度分類 =====
-  // 各指標の |deviation| を「正常域(±tol)」「軽度(±2*tol)」「中等度(±3*tol)」「重度」に分ける
+  // 各指標の |deviation| を「正常域(±tol)」「軽度(±2*tol)」「中等度(±3*tol)」「顕著」に分ける
   function classify(absDev, tol) {
     if (absDev <= tol) return "normal";
     if (absDev <= tol * 2) return "mild";
@@ -202,7 +202,7 @@
     return { normal: 25, mild: 18, moderate: 10, severe: 3 }[sev] || 0;
   }
   function severityLabel(sev) {
-    return { normal: "正常域", mild: "軽度", moderate: "中等度", severe: "高度" }[sev] || sev;
+    return { normal: "正常域", mild: "軽度", moderate: "中等度", severe: "顕著" }[sev] || sev;
   }
 
   // ===== 臨床メトリクス（正面立位） =====
@@ -350,6 +350,38 @@
     return patterns;
   }
 
+  // ===== 姿勢一言サマリ =====
+  // 「つまりなんという姿勢なのか」を1行で表現する。最重症の指標から命名する。
+  const TARGET_SCORE = 85; // 目標スコア（コア4指標が全て正常〜軽度におさまる目安）
+  const SEV_RANK = { normal: 0, mild: 1, moderate: 2, severe: 3 };
+
+  function buildSummaryLabel(metrics, score) {
+    if (!metrics.length) return "—";
+    const coreKeys = ["shoulder_tilt", "pelvic_tilt", "head_lateral", "trunk_tilt"];
+    const core = metrics.filter((m) => coreKeys.includes(m.key));
+    const worst = [...core].sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity])[0];
+
+    if (!worst || worst.severity === "normal") {
+      if (score >= 95) return "ほぼ理想的な正面立位";
+      return "概ね均整のとれた正面立位";
+    }
+
+    const abn = core.filter((m) => m.severity !== "normal");
+    const tags = abn.map((m) => {
+      switch (m.key) {
+        case "shoulder_tilt": return `${m.direction}の肩`;
+        case "pelvic_tilt": return `${m.direction}の骨盤`;
+        case "head_lateral": return `頭部${m.direction}`;
+        case "trunk_tilt": return `体幹${m.direction}`;
+      }
+    }).filter(Boolean);
+
+    const sevWord = severityLabel(worst.severity);
+    if (tags.length === 1) return `${sevWord}な${tags[0]}傾向`;
+    if (tags.length === 2) return `${sevWord}な${tags.join("・")}傾向`;
+    return `複合姿勢（${tags.slice(0, 2).join("・")} など${tags.length}項目）`;
+  }
+
   // ===== 総合 evaluate() =====
   function evaluate(landmarks) {
     const quality = evaluateQuality(landmarks);
@@ -359,6 +391,8 @@
         score: null,
         metrics: [],
         patterns: [],
+        summaryLabel: null,
+        targetScore: TARGET_SCORE,
         kendallNote: KENDALL_LIMITATION_NOTE,
       };
     }
@@ -368,6 +402,8 @@
       score: result.score,
       metrics: result.metrics,
       patterns: result.patterns,
+      summaryLabel: buildSummaryLabel(result.metrics, result.score),
+      targetScore: TARGET_SCORE,
       kendallNote: KENDALL_LIMITATION_NOTE,
     };
   }

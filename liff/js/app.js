@@ -146,10 +146,17 @@
     if (q.canScore && evalResult.score != null) {
       $("score-value").textContent = evalResult.score;
       $("score-sub").textContent = "コア4指標（肩・骨盤・頭部偏位・体幹）の重症度合算";
+      $("score-summary").textContent = evalResult.summaryLabel || "";
+      $("score-summary").style.display = "";
       $("btn-save").disabled = false;
+      // 統計チップを描画（GAS取得は非同期で後追い）
+      renderScoreStats(evalResult, null);
+      fetchAndRenderStats(evalResult);
     } else {
       $("score-value").textContent = "—";
       $("score-sub").textContent = "撮影品質要件を満たしていないため、スコアは算出していません。";
+      $("score-summary").style.display = "none";
+      $("score-stats").innerHTML = "";
       $("btn-save").disabled = true;
     }
 
@@ -179,6 +186,42 @@
     }
 
     $("kendall-note").textContent = evalResult.kendallNote || "";
+  }
+
+  function renderScoreStats(evalResult, stats) {
+    const el = $("score-stats");
+    el.innerHTML = "";
+    const target = evalResult.targetScore || 85;
+    addStatChip(el, "目標", `${target}点以上`, "target");
+    if (stats && stats.user) {
+      if (stats.user.average != null) {
+        addStatChip(el, "あなたの平均", `${stats.user.average}点 (${stats.user.count}回)`);
+      }
+      if (stats.user.lastScore != null && evalResult.score != null) {
+        const diff = evalResult.score - stats.user.lastScore;
+        const sign = diff > 0 ? "+" : "";
+        const klass = diff > 0 ? "diff-up" : diff < 0 ? "diff-down" : "";
+        addStatChip(el, "前回比", `${sign}${diff}点`, klass);
+      }
+    }
+    if (stats && stats.clinic && stats.clinic.average != null) {
+      addStatChip(el, "院内平均", `${stats.clinic.average}点 (${stats.clinic.count}件)`);
+    }
+  }
+  function addStatChip(parent, label, value, klass) {
+    const span = document.createElement("span");
+    span.className = "stat-chip" + (klass ? " " + klass : "");
+    span.innerHTML = `${escapeHtml(label)}: <strong>${escapeHtml(value)}</strong>`;
+    parent.appendChild(span);
+  }
+  async function fetchAndRenderStats(evalResult) {
+    try {
+      const data = await callGas({ action: "stats", idToken: state.idToken });
+      renderScoreStats(evalResult, data);
+    } catch (e) {
+      console.warn("stats取得失敗", e);
+      // 失敗してもサイレント。目標チップだけ残る。
+    }
   }
 
   function renderMetricRow(m) {

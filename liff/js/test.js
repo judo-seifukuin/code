@@ -87,9 +87,15 @@
       if (q.canScore && evalResult.score != null) {
         $("score-value").textContent = evalResult.score;
         $("score-sub").textContent = "コア4指標（肩・骨盤・頭部偏位・体幹）の重症度合算";
+        $("score-summary").textContent = evalResult.summaryLabel || "";
+        $("score-summary").style.display = "";
+        const stats = $("score-stats");
+        stats.innerHTML = `<span class="stat-chip target">目標: <strong>${evalResult.targetScore || 85}点以上</strong></span>`;
       } else {
         $("score-value").textContent = "—";
         $("score-sub").textContent = "撮影品質要件を満たしていないため、スコアは算出していません。";
+        $("score-summary").style.display = "none";
+        $("score-stats").innerHTML = "";
       }
 
       // 計測値テーブル

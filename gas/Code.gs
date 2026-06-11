@@ -17,6 +17,8 @@ function doPost(e) {
         return jsonResponse(Store_.saveRecord(userId, payload));
       case "history":
         return jsonResponse(Store_.getHistory(userId));
+      case "stats":
+        return jsonResponse(Store_.getStats(userId));
       default:
         return jsonResponse({ ok: false, error: "unknown action: " + action });
     }
