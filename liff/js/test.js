@@ -67,10 +67,10 @@
       state.lastEvalResult = evalResult;
       redrawCanvas();
 
+      const q = evalResult.quality;
+
       // メタ
       const meta = $("result-meta");
-      meta.innerHTML = "";
-      const q = evalResult.quality;
       meta.innerHTML = `
         <span class="chip">アングル: <strong>${labelOfView(q.view)}</strong></span>
         <span class="chip">全身可視: <strong>${q.fullBody ? "✓" : "✗"}</strong></span>
@@ -87,13 +87,34 @@
         warn.classList.add("hidden");
       }
 
-      // スコア
+      // 段①: 結論ブロック
+      const conc = $("conclusion");
+      conc.classList.remove("good", "fair", "warn", "alert", "unavailable");
+      const status = evalResult.status || { icon: "—", label: "—", klass: "unavailable" };
+      conc.classList.add(status.klass);
       if (q.canScore && evalResult.score != null) {
         $("score-value").textContent = evalResult.score;
-        $("score-sub").textContent = "コア4指標（肩・骨盤・頭部偏位・体幹）の重症度合算";
+        $("score-status").textContent = `${status.icon} ${status.label}`;
+        $("score-summary").textContent = evalResult.summaryLabel || "";
+        $("score-summary").style.display = "";
+        $("score-stats").innerHTML = `<span class="stat-chip target">目標: <strong>${evalResult.targetScore || 85}点以上</strong></span>`;
       } else {
         $("score-value").textContent = "—";
-        $("score-sub").textContent = "撮影品質要件を満たしていないため、スコアは算出していません。";
+        $("score-status").textContent = "評価不可";
+        $("score-summary").textContent = "撮影品質要件を満たしていません";
+        $("score-summary").style.display = "";
+        $("score-stats").innerHTML = "";
+      }
+
+      // 段②: 今日のひとこと
+      const t = evalResult.takeaway;
+      const tBox = $("takeaway");
+      if (!t || !q.canScore) {
+        tBox.style.display = "none";
+      } else {
+        tBox.style.display = "";
+        $("takeaway-body").innerHTML = `${escapeHtml(t.observation)}<br><span style="color:var(--text-sub);font-size:12px;">${escapeHtml(t.cause)}</span>`;
+        $("takeaway-action").textContent = "→ " + t.action;
       }
 
       // 計測値テーブル
