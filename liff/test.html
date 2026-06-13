@@ -40,6 +40,10 @@
           <img src="sample/IMG_1360.png" alt="サンプル3" />
           <span>サンプル③</span>
         </div>
+        <div class="sample-item" data-src="sample/side.png">
+          <img src="sample/side.png" alt="横向きサンプル" onerror="this.style.opacity='0.3';this.parentElement.title='側面画像未配置: liff/sample/side.png を追加してください'" />
+          <span>横向き（側面）</span>
+        </div>
       </div>
       <input type="file" id="file-input" accept="image/*" style="display:none" />
     </section>
@@ -72,7 +76,23 @@
         <div class="conclusion-stats" id="score-stats"></div>
       </div>
 
-      <!-- 段②: 今日のひとこと -->
+      <!-- 段②: 分析画像（スコアとひとことの間に表示） -->
+      <div class="result-image">
+        <div class="result-area">
+          <canvas id="result-canvas"></canvas>
+        </div>
+        <div class="layer-controls" id="layer-controls">
+          <span class="layer-title">表示レイヤー</span>
+          <label><input type="checkbox" data-layer="idealLines" /> 正常との比較</label>
+          <label><input type="checkbox" data-layer="arrows" /> 歪み矢印</label>
+          <label><input type="checkbox" data-layer="partPlumbLines" /> 部位別プラム</label>
+          <label><input type="checkbox" data-layer="heatmap" /> 筋肉ヒートマップ</label>
+          <label><input type="checkbox" data-layer="futureGhost" /> ◯年後の姿勢</label>
+        </div>
+        <div class="result-meta" id="result-meta"></div>
+      </div>
+
+      <!-- 段③: 今日のひとこと -->
       <div id="takeaway" class="takeaway">
         <div class="takeaway-title">💬 今日のひとこと</div>
         <div class="takeaway-body" id="takeaway-body"></div>
@@ -103,26 +123,11 @@
             <li>青破線: 垂直基準（プラムライン）</li>
             <li>緑線: 検出された骨格</li>
             <li>赤点: 各ランドマーク</li>
+            <li>緑破線（理想ラベル付き）: 正常との比較の水平/垂直理想線</li>
           </ul>
           <h4>「今日のひとこと」とは</h4>
           <p>最も問題のある指標から「観察」「考えられる原因」「おすすめ対応」を生成します。詳しく分析したい場合は下の各パネルを展開してください。</p>
         </div>
-      </details>
-
-      <!-- 段③: 詳細パネル（折りたたみ） -->
-      <details class="panel">
-        <summary>🖼️ 骨格画像と撮影情報</summary>
-        <div class="result-area">
-          <canvas id="result-canvas"></canvas>
-        </div>
-        <div class="layer-controls" id="layer-controls">
-          <span class="layer-title">表示レイヤー</span>
-          <label><input type="checkbox" data-layer="arrows" /> 歪み矢印</label>
-          <label><input type="checkbox" data-layer="partPlumbLines" /> 部位別プラム</label>
-          <label><input type="checkbox" data-layer="heatmap" /> 筋肉ヒートマップ</label>
-          <label><input type="checkbox" data-layer="futureGhost" /> ◯年後の姿勢</label>
-        </div>
-        <div class="result-meta" id="result-meta"></div>
       </details>
 
       <details class="panel">

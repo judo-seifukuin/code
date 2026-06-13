@@ -503,6 +503,11 @@
       drawHeatmap(ctx, landmarks, evalResult, width, height);
     }
 
+    // 「正常との比較」: 理想の水平線・垂直プラムラインを重畳
+    if (opts.idealLines) {
+      drawIdealLines(ctx, landmarks, width, height);
+    }
+
     // メイン骨格描画
     if (typeof drawConnectors === "function" && typeof POSE_CONNECTIONS !== "undefined") {
       drawConnectors(ctx, landmarks, POSE_CONNECTIONS, {
@@ -576,6 +581,47 @@
   function cmFromNormalizedDx(normDx, shoulderWidthNormalized) {
     if (!shoulderWidthNormalized || shoulderWidthNormalized < 1e-6) return 0;
     return (normDx / shoulderWidthNormalized) * 38;
+  }
+
+  // 正常との比較ライン: 各関節対の中点を通る水平な「理想ライン」を緑で描く
+  function drawIdealLines(ctx, landmarks, width, height) {
+    const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+    const lh = landmarks[LM.LEFT_HIP], rh = landmarks[LM.RIGHT_HIP];
+    const le = landmarks[LM.LEFT_EAR], re = landmarks[LM.RIGHT_EAR];
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(76, 175, 80, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 5]);
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillStyle = "#2e7d32";
+
+    function horiz(label, yNorm) {
+      const y = yNorm * height;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+      labelOnCanvas(ctx, "理想：" + label, 4, y - 4);
+    }
+
+    if (ls && rs) horiz("肩水平", (ls.y + rs.y) / 2);
+    if (lh && rh) horiz("骨盤水平", (lh.y + rh.y) / 2);
+    if (le && re && (le.visibility ?? 1) > 0.5 && (re.visibility ?? 1) > 0.5) {
+      horiz("耳水平", (le.y + re.y) / 2);
+    }
+
+    // 理想の垂直中心線（解剖学的中央 = 肩中点と腰中点の平均x）
+    if (ls && rs && lh && rh) {
+      const cx = ((ls.x + rs.x + lh.x + rh.x) / 4) * width;
+      ctx.beginPath();
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, height);
+      ctx.stroke();
+      labelOnCanvas(ctx, "理想：体軸", cx + 4, 12);
+    }
+
+    ctx.restore();
   }
 
   // 部位別プラムライン: 主要中点（耳・肩・腰・膝・足首）から中心垂線への横方向オフセットを可視化
