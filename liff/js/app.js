@@ -13,7 +13,7 @@
     lastOriginalCanvas: null,
     lastLandmarks: null,
     lastEvalResult: null,
-    layers: { arrows: false, partPlumbLines: false, heatmap: false, futureGhost: false },
+    layers: { idealLines: false, arrows: false, partPlumbLines: false, heatmap: false, futureGhost: false },
   };
 
   // ---- 画面遷移 ----
@@ -264,6 +264,7 @@
     const opts = {
       plumbLine: true,
       labels: true,
+      idealLines: state.layers.idealLines,
       arrows: state.layers.arrows,
       partPlumbLines: state.layers.partPlumbLines,
       heatmap: state.layers.heatmap,

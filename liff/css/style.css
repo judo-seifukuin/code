@@ -235,6 +235,22 @@ button.secondary {
   margin-top: 6px;
 }
 
+/* ===== Tier 2: 分析画像（スコア直下、折りたたみなし） ===== */
+.result-image {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.result-image .result-area { margin-bottom: 10px; }
+.result-image .result-meta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+}
+
 /* ===== Guide panel ===== */
 .guide {
   padding: 12px 14px;
