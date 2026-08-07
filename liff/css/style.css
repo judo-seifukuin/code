@@ -426,9 +426,11 @@ button.secondary {
   width: 100%;
   aspect-ratio: 3 / 4;
   object-fit: cover;
-  object-position: top;
+  object-position: center top;
   border-radius: 6px;
-  clip-path: inset(0 12% 0 0);
+  /* 画像本体は左右対称のまま表示し、右下隅のGemini透かしだけを polygon clip でカットする。
+     角は (右辺 100%→94%, 内側 90%→100%) を結ぶラインで切り欠く形。 */
+  clip-path: polygon(0 0, 100% 0, 100% 94%, 90% 94%, 90% 100%, 0 100%);
 }
 
 .sample-item span {
