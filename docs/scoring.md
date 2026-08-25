@@ -154,12 +154,45 @@ GAS の `stats` アクションが以下を返却し、結果画面のチップ�
 ### 4.4 今日のひとこと（takeaway）
 
 最重症のコア指標から「観察」「考えられる原因」「おすすめ対応」を生成。
+
+正面版:
 - **shoulder_tilt**: 利き腕の癖・僧帽筋上部の緊張 → 肩のストレッチ
 - **pelvic_tilt**: 脚長差・中殿筋機能低下 → 骨盤調整・中殿筋バランス
 - **head_lateral**: 頸椎側屈・スマホ姿勢 → 頸部ストレッチ
 - **trunk_tilt**: 荷重の左右差・機能性側弯 → 体幹安定化エクササイズ
 
+側面版:
+- **forward_head**: スマホ/PC姿勢・頸椎伸展代償 → chin tuck・後頭下筋リリース
+- **rounded_shoulder**: 胸筋短縮・菱形筋弱化 → 胸開きストレッチ・肩甲骨後方内転
+- **pelvic_shift**: 腹筋弱化・腸腰筋短縮 → 体幹強化・股関節屈筋ストレッチ
+
 全項目正常域なら「現状維持」を案内。
+
+---
+
+## 4.5 側面立位メトリクス（sagittal）
+
+側面撮影が検出されると自動的に切り替わる。基準系:
+- **facing detection**: 鼻の x が耳の x より小さければ「画像左が anterior」
+- **anteriorSign**: anterior 方向を統一的に正として扱うための符号
+
+指標（コア3 + 補助1）:
+
+| キー | 指標名 | 参考正常域 |
+| --- | --- | --- |
+| forward_head | 頭部前方位 (Forward Head Posture) | ±4° |
+| rounded_shoulder | 肩の前方位 (猫背傾向 / Kyphotic tendency) | ±3° |
+| pelvic_shift | 骨盤の前後位置 (Sway-back proxy) | ±3° |
+| knee_shift | 膝の位置 (Knee shift) | ±3° |
+
+**総合スコア**: コア3指標（forward_head / rounded_shoulder / pelvic_shift）の重症度合算 75点満点 → 100点に線形換算。膝は補助情報として表示のみ。
+
+**Kendall 参考分類（俗称）**:
+- 前方頭位姿勢（Forward Head Posture）
+- 猫背傾向（Round-shouldered / Kyphotic）
+- スウェイバック傾向（Sway-back）
+- 3指標同時異常 → 「複合的な姿勢崩れ」
+- フラットバック傾向は椎体情報が無いため厳密判定不可（今バージョンでは提示しない）
 
 ---
 

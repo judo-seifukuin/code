@@ -169,9 +169,9 @@
       view = "oblique";
     }
 
-    const canScore = fullBody && standing && view === "frontal";
-    if (fullBody && standing && view !== "frontal") {
-      warnings.push(`正面撮影として認識できませんでした（${viewLabel(view)}と推定）。本ツールは現在「正面立位」の評価のみ対応しています。`);
+    const canScore = fullBody && standing && (view === "frontal" || view === "left_side" || view === "right_side");
+    if (fullBody && standing && !canScore) {
+      warnings.push(`撮影アングルを判定できませんでした（${viewLabel(view)}と推定）。正面 or 完全な側面で撮り直してください。`);
     }
 
     return {
@@ -314,6 +314,155 @@
     return { metrics, score: totalScore, patterns };
   }
 
+  // ===== 臨床メトリクス（側面立位: Kendall 参考 俗称ベース） =====
+  //
+  // 側面像では、以下を評価する:
+  //   - 頭部前方位（Forward Head Posture）: 耳が肩より前方にあるか
+  //   - 肩の前方位（Rounded Shoulder / 猫背傾向）: 肩が骨盤より前方にあるか
+  //   - 骨盤の前後位置（Sway-back tendency）: 骨盤が足首より前方にあるか
+  //   - 膝の位置（Knee position）: 膝が足首より前後どちらにあるか（過伸展 / 屈曲傾向）
+  //
+  // 参照系は「解剖学的アンテリア方向」に統一する。
+  // 撮影方向(left_side/right_side)によって画像内 x の増加方向と anterior が
+  // 逆になるので、まず facing direction を検出して符号を揃える。
+  //
+  // ⚠️ 注意: 脊柱椎体ランドマークが無いため、Kendall 4分類の厳密判定はできない。
+  //   ここでは「代表的な逸脱パターンを俗称で提示」する簡易スクリーニング。
+  function evaluateSagittal(landmarks, view) {
+    const ls = landmarks[LM.LEFT_SHOULDER], rs = landmarks[LM.RIGHT_SHOULDER];
+    const lh = landmarks[LM.LEFT_HIP], rh = landmarks[LM.RIGHT_HIP];
+    const nose = landmarks[LM.NOSE];
+    const le = landmarks[LM.LEFT_EAR], re = landmarks[LM.RIGHT_EAR];
+    const lk = landmarks[LM.LEFT_KNEE], rk = landmarks[LM.RIGHT_KNEE];
+    const la = landmarks[LM.LEFT_ANKLE], ra = landmarks[LM.RIGHT_ANKLE];
+
+    // 側面撮影では反対側のランドマーク（片側）は可視性が低い。visibility の高い側を採用。
+    const pick = (a, b) => ((a?.visibility ?? 0) >= (b?.visibility ?? 0) ? a : b);
+    const shoulder = pick(ls, rs);
+    const hip = pick(lh, rh);
+    const ear = pick(le, re);
+    const knee = pick(lk, rk);
+    const ankle = pick(la, ra);
+
+    // Facing direction: 鼻の x が耳の x より小さい → 人物は画像左を向いている
+    // anterior 方向: 人物が向いている側 = 鼻がある側の image-x 方向
+    const facing = nose.x < ear.x ? "left" : "right"; // "left" = 画像左が anterior
+    const anteriorSign = facing === "left" ? -1 : 1; // +1 で「x が大きい方向 = anterior」
+
+    // 側面基準スケール: 躯幹縦長（肩→腰）を 1 単位として、cm 換算は 躯幹平均 40cm とする
+    const trunkLen = Math.abs(shoulder.y - hip.y) || 1e-9;
+    const cmPerUnit = 40 / trunkLen; // 正規化1あたりの cm
+
+    // 1) 頭部前方位（Forward Head Posture）
+    //    耳が肩に対してどれだけ anterior に出ているか → 度換算（atan で正規化）
+    const earDx = (ear.x - shoulder.x) * anteriorSign; // 正: anterior に出ている
+    const earShoulderVertical = Math.abs(ear.y - shoulder.y) || 1e-9;
+    const forwardHeadDeg = toDeg(Math.atan2(earDx, earShoulderVertical));
+
+    // 2) 肩の前方位（Rounded Shoulder / 猫背傾向）
+    //    肩が腰に対してどれだけ anterior に出ているか
+    const shoulderDx = (shoulder.x - hip.x) * anteriorSign;
+    const roundedShoulderDeg = toDeg(Math.atan2(shoulderDx, trunkLen));
+
+    // 3) 骨盤の前後位置（Sway-back tendency 指標）
+    //    腰が足首に対してどれだけ anterior にあるか
+    const legLen = Math.abs(hip.y - ankle.y) || 1e-9;
+    const pelvicDx = (hip.x - ankle.x) * anteriorSign;
+    const pelvicShiftDeg = toDeg(Math.atan2(pelvicDx, legLen));
+
+    // 4) 膝の位置（Knee position）
+    //    膝が足首に対してどれだけ anterior/posterior にあるか
+    const kneeToAnkleVertical = Math.abs(knee.y - ankle.y) || 1e-9;
+    const kneeDx = (knee.x - ankle.x) * anteriorSign;
+    const kneeShiftDeg = toDeg(Math.atan2(kneeDx, kneeToAnkleVertical));
+
+    const metrics = [
+      buildMetric({
+        key: "forward_head",
+        label: "頭部前方位",
+        clinicalName: "Forward Head Posture (sagittal)",
+        valueDeg: forwardHeadDeg,
+        normalAbsDeg: 4,
+        positiveSide: `前方位 (約 ${Math.abs(earDx * cmPerUnit).toFixed(1)}cm)`,
+        negativeSide: `後方位`,
+        explanation: "耳が肩峰よりどれだけ前方に出ているか。頸椎の伸展・胸鎖乳突筋の緊張・視覚作業の癖で増大します。",
+      }),
+      buildMetric({
+        key: "rounded_shoulder",
+        label: "肩の前方位（猫背傾向）",
+        clinicalName: "Rounded Shoulder / Kyphotic tendency (sagittal)",
+        valueDeg: roundedShoulderDeg,
+        normalAbsDeg: 3,
+        positiveSide: "猫背傾向",
+        negativeSide: "後方位",
+        explanation: "肩峰が骨盤よりどれだけ前方に出ているか。胸筋の短縮、菱形筋・僧帽筋中下部の弱化で増大します。",
+      }),
+      buildMetric({
+        key: "pelvic_shift",
+        label: "骨盤の前後位置",
+        clinicalName: "Pelvic anterior shift (sway-back proxy)",
+        valueDeg: pelvicShiftDeg,
+        normalAbsDeg: 3,
+        positiveSide: "スウェイバック傾向",
+        negativeSide: "後方位",
+        explanation: "骨盤が足首よりどれだけ前方にあるか。スウェイバック（骨盤前突）は腹筋弱化・腸腰筋短縮と関連します。",
+      }),
+      buildMetric({
+        key: "knee_shift",
+        label: "膝の位置",
+        clinicalName: "Knee shift (sagittal)",
+        valueDeg: kneeShiftDeg,
+        normalAbsDeg: 3,
+        positiveSide: "膝が前方（過伸展/前方位）",
+        negativeSide: "膝が後方（屈曲/後方位）",
+        explanation: "膝が足首より前後どちらに位置するか。過伸展はハムストリング短縮、屈曲位は前脛骨筋の代償の可能性。",
+      }),
+    ];
+
+    // 総合スコア: コア3指標（頭部・肩・骨盤）の重症度を合算し、膝は補助
+    const core = metrics.slice(0, 3);
+    // 25点満点×3 = 75満点 → 100点に線形換算
+    const rawTotal = core.reduce((s, m) => s + m.severityScore, 0);
+    const totalScore = Math.round((rawTotal / 75) * 100);
+
+    // Kendall 参考の俗称パターン
+    const patterns = classifySagittalPatterns(metrics);
+
+    return { metrics, score: totalScore, patterns, facing };
+  }
+
+  function classifySagittalPatterns(metrics) {
+    const m = Object.fromEntries(metrics.map((x) => [x.key, x]));
+    const patterns = [];
+    const fh = m.forward_head, rs = m.rounded_shoulder, ps = m.pelvic_shift, kn = m.knee_shift;
+
+    // 前方頭位姿勢（Forward Head Posture）
+    if (fh && fh.severity !== "normal" && fh.valueDeg > 0) {
+      patterns.push(`前方頭位姿勢（Forward Head Posture, ${Math.abs(fh.valueDeg)}°）`);
+    }
+    // 猫背傾向（Round-shouldered / Kyphotic tendency）
+    if (rs && rs.severity !== "normal" && rs.valueDeg > 0) {
+      patterns.push(`猫背傾向（Kyphotic / Round-shouldered, ${Math.abs(rs.valueDeg)}°）`);
+    }
+    // スウェイバック傾向（Sway-back）: 骨盤が前方 + 上体が後方（肩は逆に後方）
+    if (ps && ps.severity !== "normal" && ps.valueDeg > 0 && rs && rs.valueDeg < 0) {
+      patterns.push(`スウェイバック傾向（Sway-back, 骨盤前突 ${Math.abs(ps.valueDeg)}°）`);
+    } else if (ps && ps.severity !== "normal" && ps.valueDeg > 0) {
+      patterns.push(`骨盤前方位（${Math.abs(ps.valueDeg)}°）`);
+    }
+    // フラットバック傾向は椎体情報が無いため厳密判定不可
+    // 前方頭位 + 猫背 + 骨盤前突 が同時にあれば「複合的な姿勢崩れ」と提示
+    if (patterns.length >= 3) {
+      patterns.push("複合的な姿勢崩れ（前方頭位・猫背・骨盤前突が同時）");
+    }
+    // 膝アライメント
+    if (kn && kn.severity !== "normal") {
+      if (kn.valueDeg > 0) patterns.push(`膝過伸展傾向（${Math.abs(kn.valueDeg)}°）`);
+      else patterns.push(`膝屈曲位傾向（${Math.abs(kn.valueDeg)}°）`);
+    }
+    return patterns;
+  }
+
   function buildMetric({ key, label, clinicalName, valueDeg, normalAbsDeg, positiveSide, negativeSide, explanation }) {
     const abs = Math.abs(valueDeg);
     const severity = classify(abs, normalAbsDeg);
@@ -358,7 +507,9 @@
   // ===== ステータス・サマリ・ひとこと =====
   const TARGET_SCORE = 85;
   const SEV_RANK = { normal: 0, mild: 1, moderate: 2, severe: 3 };
-  const CORE_KEYS = ["shoulder_tilt", "pelvic_tilt", "head_lateral", "trunk_tilt"];
+  const CORE_KEYS_FRONTAL = ["shoulder_tilt", "pelvic_tilt", "head_lateral", "trunk_tilt"];
+  const CORE_KEYS_SAGITTAL = ["forward_head", "rounded_shoulder", "pelvic_shift"];
+  const CORE_KEYS = CORE_KEYS_FRONTAL.concat(CORE_KEYS_SAGITTAL);
 
   function statusForScore(score) {
     if (score == null) return { icon: "—", label: "評価不可", klass: "unavailable" };
@@ -369,27 +520,35 @@
     return { icon: "🔴", label: "要相談", klass: "alert" };
   }
 
-  // 「つまりなんという姿勢か」を1行で表現する
-  function buildSummaryLabel(metrics, score) {
+  // 「つまりなんという姿勢か」を1行で表現する（正面/側面 両対応）
+  function buildSummaryLabel(metrics, score, view) {
     if (!metrics.length) return "—";
-    const core = metrics.filter((m) => CORE_KEYS.includes(m.key));
+    const isSagittal = view === "left_side" || view === "right_side";
+    const keys = isSagittal ? CORE_KEYS_SAGITTAL : CORE_KEYS_FRONTAL;
+    const posture = isSagittal ? "側面立位" : "正面立位";
+    const core = metrics.filter((m) => keys.includes(m.key));
     const worst = [...core].sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity])[0];
     if (!worst || worst.severity === "normal") {
-      if (score >= 95) return "ほぼ理想的な正面立位";
-      return "概ね均整のとれた正面立位";
+      if (score >= 95) return `ほぼ理想的な${posture}`;
+      return `概ね均整のとれた${posture}`;
     }
     const abn = core.filter((m) => m.severity !== "normal");
     const tags = abn.map((m) => {
       switch (m.key) {
+        // frontal
         case "shoulder_tilt": return `${m.direction}の肩`;
         case "pelvic_tilt": return `${m.direction}の骨盤`;
         case "head_lateral": return `頭部${m.direction}`;
         case "trunk_tilt": return `体幹${m.direction}`;
+        // sagittal
+        case "forward_head": return "前方頭位";
+        case "rounded_shoulder": return "猫背傾向";
+        case "pelvic_shift": return "スウェイバック傾向";
       }
     }).filter(Boolean);
     const sevWord = severityLabel(worst.severity);
-    if (tags.length === 1) return `${sevWord}な${tags[0]}傾向`;
-    if (tags.length === 2) return `${sevWord}な${tags.join("・")}傾向`;
+    if (tags.length === 1) return `${sevWord}な${tags[0]}`;
+    if (tags.length === 2) return `${sevWord}な${tags.join("・")}`;
     return `複合姿勢（${tags.slice(0, 2).join("・")} など${tags.length}項目）`;
   }
 
@@ -415,9 +574,30 @@
       cause: "荷重の左右差、機能性側弯、外側支持機構の不均衡が考えられます。",
       action: "左右均等な荷重を意識し、体幹周りの安定化エクササイズを。",
     },
+    // 側面（sagittal）版
+    forward_head: {
+      observation: (m) => `頭部が肩より ${Math.abs(m.valueDeg).toFixed(1)}° 前方に出ています（前方頭位姿勢の兆候）。`,
+      cause: "スマホ・PC作業の長時間化、頸椎伸展位、上位頸椎の伸展代償が考えられます。",
+      action: "顎引きエクササイズ（chin tuck）、後頭下筋のリリース、モニター位置の見直しを。",
+    },
+    rounded_shoulder: {
+      observation: (m) => `肩が骨盤より ${Math.abs(m.valueDeg).toFixed(1)}° 前方に出ています（猫背傾向）。`,
+      cause: "胸筋群の短縮、菱形筋・僧帽筋中下部の弱化、上位胸椎の後弯増強が考えられます。",
+      action: "胸を開くストレッチ（大胸筋・小胸筋）、肩甲骨の後方内転エクササイズを試しましょう。",
+    },
+    pelvic_shift: {
+      observation: (m) => `骨盤が足首より ${Math.abs(m.valueDeg).toFixed(1)}° 前方に出ています（スウェイバック傾向）。`,
+      cause: "腹筋群の弱化、腸腰筋の短縮、ハムストリング優位が考えられます。",
+      action: "体幹（腹直筋・腹斜筋）の強化と、股関節屈筋群のストレッチを。",
+    },
+    knee_shift: {
+      observation: (m) => `膝が足首より ${Math.abs(m.valueDeg).toFixed(1)}° ${m.valueDeg > 0 ? "前方" : "後方"}にあります。`,
+      cause: m => m.valueDeg > 0 ? "膝過伸展、ハムストリング短縮、脛骨前方偏位の傾向。" : "膝屈曲位、前脛骨筋代償、荷重前方偏位の傾向。",
+      action: "膝周りの安定化（ハムストリング・大腿四頭筋の柔軟性と筋力バランス）を意識。",
+    },
   };
   const NORMAL_TAKEAWAY = {
-    observation: "コア4指標すべてが正常域に収まっています。",
+    observation: "コア指標すべてが正常域に収まっています。",
     cause: "現状の姿勢は概ね均整がとれています。",
     action: "この状態を維持するため、日々のストレッチを継続しましょう。",
   };
@@ -429,9 +609,10 @@
     const worst = abnormal.sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity])[0];
     const tpl = TAKEAWAY_TEMPLATES[worst.key];
     if (!tpl) return NORMAL_TAKEAWAY;
+    const cause = typeof tpl.cause === "function" ? tpl.cause(worst) : tpl.cause;
     return {
       observation: tpl.observation(worst),
-      cause: tpl.cause,
+      cause,
       action: tpl.action,
     };
   }
@@ -452,13 +633,14 @@
         kendallNote: KENDALL_LIMITATION_NOTE,
       };
     }
-    const result = evaluateFrontal(landmarks);
+    const isSagittal = quality.view === "left_side" || quality.view === "right_side";
+    const result = isSagittal ? evaluateSagittal(landmarks, quality.view) : evaluateFrontal(landmarks);
     return {
       quality,
       score: result.score,
       metrics: result.metrics,
       patterns: result.patterns,
-      summaryLabel: buildSummaryLabel(result.metrics, result.score),
+      summaryLabel: buildSummaryLabel(result.metrics, result.score, quality.view),
       takeaway: buildTakeaway(result.metrics),
       status: statusForScore(result.score),
       targetScore: TARGET_SCORE,
@@ -467,9 +649,9 @@
   }
 
   const KENDALL_LIMITATION_NOTE = [
-    "本ツールは正面立位のスクリーニングです。",
-    "Kendall の4分類（Ideal / Kyphosis-Lordosis / Sway-back / Flat-back）は側面像での脊柱湾曲評価が前提のため、本ツールでは厳密な分類は行いません。",
-    "側面評価は今後のバージョンで対応予定です。",
+    "本ツールは正面・側面立位の簡易スクリーニングです。",
+    "側面評価は Kendall 4分類（Ideal / Kyphosis-Lordosis / Sway-back / Flat-back）を参考にした俗称ベースの近似判定です。",
+    "MediaPipe Pose は脊柱椎体ランドマークを返さないため、厳密なケンダル分類は行っていません（前方頭位・猫背傾向・スウェイバック傾向の目安として使用）。",
   ].join(" ");
 
   // ===== 可視化 =====
