@@ -156,15 +156,28 @@
       warnings.push(`立位ではない可能性があります（膝平均角度 ${((leftKneeAngle + rightKneeAngle) / 2).toFixed(0)}°）。両足で立って正面を向いて撮影してください。`);
     }
 
-    // 撮影アングル: 正面 vs 側面
+    // 撮影アングル: 可視性の左右差を主判定にし、shoulderSpread を補助にする。
+    // 側面撮影では反対側の耳・肩・腰・膝が体の陰に入り visibility が明らかに下がる。
     const shoulderSpread = Math.abs(ls.x - rs.x);
     const hipSpread = Math.abs(lh.x - rh.x);
-    const ls_vis = ls.visibility ?? 1, rs_vis = rs.visibility ?? 1;
+    const le = landmarks[LM.LEFT_EAR], re = landmarks[LM.RIGHT_EAR];
+    const leftAvgVis = ((ls.visibility ?? 0) + (lh.visibility ?? 0) + ((le && le.visibility) ?? 0) + (lk.visibility ?? 0)) / 4;
+    const rightAvgVis = ((rs.visibility ?? 0) + (rh.visibility ?? 0) + ((re && re.visibility) ?? 0) + (rk.visibility ?? 0)) / 4;
+    const visAsym = leftAvgVis - rightAvgVis; // 符号付き。正なら左側が可視 = 右側面
+    const visAsymAbs = Math.abs(visAsym);
+
     let view = "unknown";
-    if (shoulderSpread > 0.10) {
+    if (visAsymAbs > 0.20) {
+      // 明確な左右可視性差 → 側面像
+      // 左のランドマークが良く見える = カメラは被写体の左側にある = 被写体は自分から見て右向き = right_side view
+      // ただしラベルは「撮影者から見た側」で統一（left_side/right_side は被写体の身体側面）
+      view = visAsym > 0 ? "right_side" : "left_side";
+    } else if (shoulderSpread > 0.06 && hipSpread > 0.04 && visAsymAbs < 0.15) {
+      // 両側とも可視 + ある程度の横幅 → 正面
       view = "frontal";
-    } else if (shoulderSpread < 0.04) {
-      view = ls_vis > rs_vis + 0.15 ? "left_side" : (rs_vis > ls_vis + 0.15 ? "right_side" : "oblique");
+    } else if (visAsymAbs > 0.12) {
+      // 中程度の左右差 → 側面気味だが甘い判定
+      view = visAsym > 0 ? "right_side" : "left_side";
     } else {
       view = "oblique";
     }
@@ -511,13 +524,24 @@
   const CORE_KEYS_SAGITTAL = ["forward_head", "rounded_shoulder", "pelvic_shift"];
   const CORE_KEYS = CORE_KEYS_FRONTAL.concat(CORE_KEYS_SAGITTAL);
 
-  function statusForScore(score) {
+  // スコアとコア指標の逸脱数からステータスを判定する。
+  // ⚠️ コア指標に1つでも正常域外があれば「良好」は出さない（"概ね良好" までに抑える）。
+  //    スコアの数値だけで「良好」を出すと、軽度の左右差があるのに「良好」と表示されて誤解を招くため。
+  function statusForResult(score, coreMetrics) {
     if (score == null) return { icon: "—", label: "評価不可", klass: "unavailable" };
-    if (score >= 90) return { icon: "🟢", label: "良好", klass: "good" };
-    if (score >= 80) return { icon: "🟢", label: "概ね良好", klass: "good" };
+    const abn = (coreMetrics || []).filter((m) => m.severity !== "normal").length;
+    if (abn === 0 && score >= 95) return { icon: "🟢", label: "良好", klass: "good" };
+    if (abn === 0) return { icon: "🟢", label: "概ね良好", klass: "good" };
+    // 逸脱があるので 良好 は出さない
+    if (abn <= 1 && score >= 85) return { icon: "🟢", label: "概ね良好", klass: "good" };
     if (score >= 70) return { icon: "🟡", label: "要観察", klass: "fair" };
     if (score >= 60) return { icon: "🟠", label: "要ケア", klass: "warn" };
     return { icon: "🔴", label: "要相談", klass: "alert" };
+  }
+
+  // 旧API互換用（未使用でも他所から呼ばれた時のフォールバック）
+  function statusForScore(score) {
+    return statusForResult(score, []);
   }
 
   // 「つまりなんという姿勢か」を1行で表現する（正面/側面 両対応）
@@ -628,13 +652,15 @@
         patterns: [],
         summaryLabel: null,
         takeaway: null,
-        status: statusForScore(null),
+        status: statusForResult(null, []),
         targetScore: TARGET_SCORE,
         kendallNote: KENDALL_LIMITATION_NOTE,
       };
     }
     const isSagittal = quality.view === "left_side" || quality.view === "right_side";
     const result = isSagittal ? evaluateSagittal(landmarks, quality.view) : evaluateFrontal(landmarks);
+    const coreKeys = isSagittal ? CORE_KEYS_SAGITTAL : CORE_KEYS_FRONTAL;
+    const coreMetrics = result.metrics.filter((m) => coreKeys.includes(m.key));
     return {
       quality,
       score: result.score,
@@ -642,7 +668,7 @@
       patterns: result.patterns,
       summaryLabel: buildSummaryLabel(result.metrics, result.score, quality.view),
       takeaway: buildTakeaway(result.metrics),
-      status: statusForScore(result.score),
+      status: statusForResult(result.score, coreMetrics),
       targetScore: TARGET_SCORE,
       kendallNote: KENDALL_LIMITATION_NOTE,
     };
