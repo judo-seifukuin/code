@@ -29,11 +29,12 @@ LINE LIFF × MediaPipe Pose × Google Apps Script で構成される、サーバ
 │   └── appsscript.json     # GASマニフェスト
 ├── visits/                 # 来院分析（新患・お久しぶり患者の抽出）※姿勢評価とは独立した別ツール
 │   ├── Classifier.gs       # 新患/お久しぶり/継続 の判定・月次集計（純粋ロジック）
+│   ├── GridReader.gs       # 予約表（/Res/ の日タブ）の解析（純粋ロジック）
+│   ├── Source.gs           # ドライブの予約表検索・差分読込
 │   ├── Config.gs           # 設定シート
-│   ├── Reader.gs           # 予約データシートの読み取り
+│   ├── Reader.gs           # 任意の貼り付けデータの読み取り
 │   ├── Report.gs           # 出力シート書き込み
 │   ├── Menu.gs             # カスタムメニュー・毎日トリガー
-│   ├── sample/             # ダミー予約データ
 │   └── test/               # Node で実行するテスト
 └── .github/workflows/
     └── pages.yml           # liff/ を GitHub Pages へ自動デプロイ

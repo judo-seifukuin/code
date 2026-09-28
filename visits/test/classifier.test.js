@@ -15,6 +15,8 @@ function test(name, fn) { tests.push({ name, fn }); }
 function rec(date, patientId, extra) {
   return Object.assign({ date, patientId, name: "", staff: "", menu: "", status: "" }, extra || {});
 }
+function plain(x) { return JSON.parse(JSON.stringify(x, (k, v) => (v && typeof v === "object" && !Array.isArray(v) ? sortKeys(v) : v))); }
+function sortKeys(o) { return Object.keys(o).sort().reduce((a, k) => ((a[k] = o[k]), a), {}); }
 function byDate(result, date, id) {
   return result.visits.find((v) => v.date === date && v.patientId === id);
 }
@@ -120,7 +122,7 @@ test("入力順に依存しない", () => {
   assert.strictEqual(byDate(r, "2026-06-01", "1").category, "お久しぶり");
 });
 
-test("月次集計・担当者別集計", () => {
+test("月次集計・担当者別集計（院が1つなら全院行なし）", () => {
   const r = C.classify([
     rec("2026-01-05", "1", { staff: "鈴木" }),
     rec("2026-01-20", "1", { staff: "鈴木" }),
@@ -129,12 +131,60 @@ test("月次集計・担当者別集計", () => {
     rec("2026-05-02", "3", { staff: "" }),     // 新患（確定）
   ], { thresholdDays: 90 });
   const s = C.summarizeMonthly(r.visits);
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(s.months)), [
-    { month: "2026-01", total: 3, patients: 2, newConfirmed: 0, newReview: 2, returning: 0, continuing: 1 },
-    { month: "2026-05", total: 2, patients: 2, newConfirmed: 1, newReview: 0, returning: 1, continuing: 0 },
-  ]);
+  const base = { clinic: "", newUnregistered: 0 };
+  assert.deepStrictEqual(plain(s.months), [
+    Object.assign({ month: "2026-01", total: 3, patients: 2, newConfirmed: 0, newReview: 2, returning: 0, continuing: 1 }, base),
+    Object.assign({ month: "2026-05", total: 2, patients: 2, newConfirmed: 1, newReview: 0, returning: 1, continuing: 0 }, base),
+  ].map(sortKeys));
   const may = s.staff.filter((x) => x.month === "2026-05").map((x) => [x.staff, x.newConfirmed, x.returning]);
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(may)), [["豊田", 0, 1], ["（未設定）", 1, 0]]);
+  assert.deepStrictEqual(plain(may), [["豊田", 0, 1], ["（未設定）", 1, 0]]);
+});
+
+test("番号は院ごとに別人として扱う（既定）", () => {
+  const r = C.classify([
+    rec("2026-01-01", "1", { clinic: "桜台" }),
+    rec("2026-01-01", "9", { clinic: "東村山" }),
+    rec("2026-06-01", "1", { clinic: "東村山" }),
+  ], { thresholdDays: 90 });
+  const v = r.visits.find((x) => x.clinic === "東村山" && x.patientId === "1");
+  assert.strictEqual(v.category, "新患");
+  assert.strictEqual(v.needsReview, false); // 東村山のデータ開始 1/1 から 151 日
+});
+
+test("sharedIds=true なら院をまたいで同一人物", () => {
+  const r = C.classify([
+    rec("2026-01-01", "1", { clinic: "桜台" }),
+    rec("2026-06-01", "1", { clinic: "東村山" }),
+  ], { thresholdDays: 90, sharedIds: true });
+  const v = r.visits.find((x) => x.date === "2026-06-01");
+  assert.strictEqual(v.category, "お久しぶり");
+  assert.strictEqual(v.prevDate, "2026-01-01");
+});
+
+test("仮番号(990)は番号未発行の新患として備考ごとに数える", () => {
+  const r = C.classify([
+    rec("2026-01-01", "1"),
+    rec("2026-09-01", "990", { name: "・", note: "西岡さん", staff: "豊田", time: "12:00" }),
+    rec("2026-09-01", "990", { name: "・", note: "西岡さん", staff: "豊田", time: "12:20" }), // 2枠連続
+    rec("2026-09-01", "990", { name: "・", note: "菅さん", staff: "豊田", time: "15:40" }),
+    rec("2026-09-01", "990", { name: "・", note: "", staff: "豊田", time: "16:00" }),
+    rec("2026-09-08", "990", { name: "・", note: "西岡さん" }), // 別の日は別来院
+  ], { thresholdDays: 90, tempIds: ["990"] });
+  const temps = r.visits.filter((v) => v.patientId === "990");
+  assert.strictEqual(temps.length, 4);
+  assert.ok(temps.every((v) => v.category === "新患（番号未発行）" && v.prevDate === ""));
+  const s = C.summarizeMonthly(r.visits).months.find((m) => m.month === "2026-09");
+  assert.strictEqual(s.newUnregistered, 4);
+  assert.strictEqual(s.patients, 4);
+});
+
+test("院が複数なら全院行を先頭に作る", () => {
+  const r = C.classify([
+    rec("2026-01-01", "1", { clinic: "桜台" }),
+    rec("2026-01-02", "1", { clinic: "東村山" }),
+  ]);
+  const s = C.summarizeMonthly(r.visits);
+  assert.deepStrictEqual(plain(s.months.map((m) => [m.clinic, m.total, m.patients])), [["全院", 2, 2], ["東村山", 1, 1], ["桜台", 1, 1]]);
 });
 
 let failed = 0;
