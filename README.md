@@ -27,6 +27,14 @@ LINE LIFF × MediaPipe Pose × Google Apps Script で構成される、サーバ
 │   ├── Store.gs            # スプレッドシート保存・履歴取得
 │   ├── Admin.gs            # スタッフ向け管理ビュー（カスタムメニュー）
 │   └── appsscript.json     # GASマニフェスト
+├── visits/                 # 来院分析（新患・お久しぶり患者の抽出）※姿勢評価とは独立した別ツール
+│   ├── Classifier.gs       # 新患/お久しぶり/継続 の判定・月次集計（純粋ロジック）
+│   ├── Config.gs           # 設定シート
+│   ├── Reader.gs           # 予約データシートの読み取り
+│   ├── Report.gs           # 出力シート書き込み
+│   ├── Menu.gs             # カスタムメニュー・毎日トリガー
+│   ├── sample/             # ダミー予約データ
+│   └── test/               # Node で実行するテスト
 └── .github/workflows/
     └── pages.yml           # liff/ を GitHub Pages へ自動デプロイ
 ```
@@ -62,6 +70,7 @@ LINE Developers / GAS のセットアップ前にカメラ＋姿勢解析の動�
 | `docs/staff-manual.md` | 現場スタッフ向け運用マニュアル |
 | `docs/terms.md` | 患者向け利用規約・プライバシーポリシー雛形 |
 | `docs/rich-menu.md` | LINE 公式アカウントのリッチメニュー設定 |
+| `docs/visits-setup.md` | 来院分析（新患・お久しぶり患者の抽出）の導入・運用手順 |
 
 ## セキュリティ設計
 
